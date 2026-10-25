@@ -57,7 +57,7 @@ export function AuthShell({ children, title, subtitle }: { children: ReactNode; 
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-accent-500 flex items-center justify-center">
             <TrendingUp className="w-5 h-5 text-white" />
           </div>
-          <span className="font-display text-2xl font-bold text-text-primary">JAWENZYSMM</span>
+          <span className="font-display text-2xl font-bold text-text-primary">ALSANCAKSMM</span>
         </Link>
         <div className="p-8 rounded-2xl bg-bg-surface border border-border-subtle">
           <h1 className="font-display text-2xl font-bold text-text-primary">{title}</h1>
