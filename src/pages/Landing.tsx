@@ -53,7 +53,7 @@ export default function Landing() {
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-accent-500 flex items-center justify-center">
               <TrendingUp className="w-5 h-5 text-white" />
             </div>
-            <span className="font-display text-xl font-bold text-text-primary">JAWENZY SMM</span>
+            <span className="font-display text-xl font-bold text-text-primary">ALSANCAK SMM</span>
           </Link>
           <div className="hidden md:flex items-center gap-8 text-sm text-text-secondary">
             <a href="#services" className="hover:text-text-primary transition-colors">Services</a>
@@ -312,9 +312,9 @@ export default function Landing() {
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-accent-500 flex items-center justify-center">
                 <TrendingUp className="w-4 h-4 text-white" />
               </div>
-              <span className="font-display font-bold text-text-primary">JAWENZY SMM Panel</span>
+              <span className="font-display font-bold text-text-primary">ALSANCAK SMM Panel</span>
             </div>
-            <p className="text-sm text-text-muted">© 2026 JAWENZY SMM Panel. All rights reserved. Trusted direct provider since 2015.</p>
+            <p className="text-sm text-text-muted">© 2026 ALSANCAK SMM Panel. All rights reserved. Trusted direct provider since 2015.</p>
           </div>
         </div>
       </footer>
