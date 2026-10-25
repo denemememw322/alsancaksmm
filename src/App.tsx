@@ -22,6 +22,7 @@ import AdminOrders from '@/pages/admin/AdminOrders';
 import AdminDeposits from '@/pages/admin/AdminDeposits';
 import AdminServices from '@/pages/admin/AdminServices';
 import AdminSettings from '@/pages/admin/AdminSettings';
+import AdminPayments from '@/pages/admin/AdminPayments';
 
 import type { JSX } from 'react';
 
@@ -100,6 +101,7 @@ function AppRoutes() {
                 <Route path="orders" element={<AdminOrders />} />
                 <Route path="deposits" element={<AdminDeposits />} />
                 <Route path="services" element={<AdminServices />} />
+                <Route path="payments" element={<AdminPayments />} />
                 <Route path="settings" element={<AdminSettings />} />
             </Route>
 
