@@ -10,6 +10,7 @@ const adminNav = [
   { to: '/admin/users', label: 'Users', icon: Users },
   { to: '/admin/orders', label: 'Orders', icon: ShoppingBag },
   { to: '/admin/deposits', label: 'Deposits', icon: Banknote },
+  { to: '/admin/payments', label: 'Payments', icon: Banknote },
   { to: '/admin/services', label: 'Services', icon: TrendingUp },
   { to: '/admin/settings', label: 'Settings', icon: Settings },
 ];
