@@ -176,7 +176,7 @@ export default function AddFunds() {
                 {gateways.map((g) => (
                   <button key={g.provider} type="button" onClick={() => setSelected(`gw:${g.provider}`)}
                     className={`flex items-center gap-3 p-4 rounded-xl border text-left ${selected === `gw:${g.provider}` ? 'bg-brand-500/10 border-brand-500/40' : 'bg-bg-elevated border-border-subtle hover:border-border-default'}`}>
-                    {g.provider === 'paymos' ? <Bitcoin className="w-5 h-5 text-brand-400" /> : <CreditCard className="w-5 h-5 text-brand-400" />}
+                    {g.provider === 'paymos' || g.provider === 'mercanpay' ? <Bitcoin className="w-5 h-5 text-brand-400" /> : <CreditCard className="w-5 h-5 text-brand-400" />}
                     <div className="font-medium text-text-primary text-sm">{g.display_name}</div>
                   </button>
                 ))}

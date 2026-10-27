@@ -21,8 +21,13 @@ const PAYMOS_FIELDS: [string, string][] = [
   ['project_id', 'Project ID (prj_...)'],
   ['webhook_secret', 'Webhook Secret (whsec_...)'],
 ];
-const INTEGRATED = ['paytr', 'paymos'];
-const FIELDS: Record<string, [string, string][]> = { paytr: PAYTR_FIELDS, paymos: PAYMOS_FIELDS };
+const MERCANPAY_FIELDS: [string, string][] = [
+  ['base_url', 'Adres (varsayılan https://mercanpay.com)'],
+  ['api_key', 'API Anahtarı (mp_...)'],
+  ['webhook_secret', 'Webhook Secret'],
+];
+const INTEGRATED = ['paytr', 'paymos', 'mercanpay'];
+const FIELDS: Record<string, [string, string][]> = { paytr: PAYTR_FIELDS, paymos: PAYMOS_FIELDS, mercanpay: MERCANPAY_FIELDS };
 
 const input = 'w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border-default text-sm text-text-primary focus:outline-none focus:border-brand-500';
 
@@ -212,8 +217,8 @@ export default function AdminPayments() {
                     ))}
                   </div>
                   <div className="text-xs text-text-muted">
-                    {g.provider === 'paytr' ? 'PayTR Mağaza Paneli → Ayarlar → Bildirim URL alanına şunu yaz:' : 'Paymos Dashboard → Developer → Webhooks bölümüne şu HTTPS adresini ekle (kategori: Invoice):'}
-                    <div className="mt-1 font-mono text-text-secondary break-all select-all">{fnUrl(g.provider === 'paytr' ? 'paytr-callback' : 'paymos-webhook')}</div>
+                    {g.provider === 'paytr' ? 'PayTR Mağaza Paneli → Ayarlar → Bildirim URL alanına şunu yaz:' : g.provider === 'paymos' ? 'Paymos Dashboard → Developer → Webhooks bölümüne şu HTTPS adresini ekle (kategori: Invoice):' : 'MercanPay satıcı panelinde webhook adresi olarak şunu kaydet (fatura başına da otomatik gönderilir):'}
+                    <div className="mt-1 font-mono text-text-secondary break-all select-all">{fnUrl(g.provider === 'paytr' ? 'paytr-callback' : g.provider === 'paymos' ? 'paymos-webhook' : 'mercanpay-webhook')}</div>
                     {g.provider === 'paymos' && <div className="mt-1">Paymos TEST (sandbox) ödemeleri bakiye yüklemez; yalnızca canlı ödemeler yükler.</div>}
                   </div>
                 </>

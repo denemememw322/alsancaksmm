@@ -1,7 +1,7 @@
 import { Outlet, NavLink, Link } from 'react-router-dom';
 import { 
   LayoutDashboard, Users, ShoppingBag, TrendingUp, 
-  Settings, LogOut, Shield, Banknote 
+  Settings, LogOut, Shield, Banknote, Plug 
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 
@@ -11,6 +11,7 @@ const adminNav = [
   { to: '/admin/orders', label: 'Orders', icon: ShoppingBag },
   { to: '/admin/deposits', label: 'Deposits', icon: Banknote },
   { to: '/admin/payments', label: 'Payments', icon: Banknote },
+  { to: '/admin/providers', label: 'Providers', icon: Plug },
   { to: '/admin/services', label: 'Services', icon: TrendingUp },
   { to: '/admin/settings', label: 'Settings', icon: Settings },
 ];
