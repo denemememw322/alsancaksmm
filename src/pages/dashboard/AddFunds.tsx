@@ -24,6 +24,8 @@ type Deposit = {
   amount: number;
   status: string;
   created_at: string;
+  expires_at?: string | null;
+  cancel_reason?: string | null;
 };
 
 type Gateway = { provider: string; display_name: string };
@@ -54,6 +56,7 @@ export default function AddFunds() {
 
   const loadDeposits = async () => {
     if (!profile) return;
+    await supabase.rpc('expire_deposit_requests');
     const { data } = await supabase
       .from('deposit_requests')
       .select('*')
@@ -62,6 +65,12 @@ export default function AddFunds() {
       .limit(10);
     setDeposits((data as Deposit[]) ?? []);
   };
+
+  useEffect(() => {
+    const t = setInterval(() => { loadDeposits(); }, 20000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.user_id]);
 
   useEffect(() => {
     (async () => {
@@ -288,7 +297,7 @@ export default function AddFunds() {
                 <tr key={d.id} className="border-b border-border-subtle last:border-0">
                   <td className="px-4 py-3 font-mono text-text-primary">{d.public_id}</td>
                   <td className="px-4 py-3 font-semibold text-text-primary">${Number(d.amount).toFixed(2)}</td>
-                  <td className="px-4 py-3"><span className={`px-2 py-1 rounded-full text-xs ${STATUS_TR[d.status]?.cls}`}>{STATUS_TR[d.status]?.label ?? d.status}</span></td>
+                  <td className="px-4 py-3"><span className={`px-2 py-1 rounded-full text-xs ${STATUS_TR[d.status]?.cls}`}>{d.status === 'cancelled' && d.cancel_reason === 'expired' ? 'İptal (süre doldu)' : STATUS_TR[d.status]?.label ?? d.status}</span></td>
                   <td className="px-4 py-3 text-text-muted">{new Date(d.created_at).toLocaleString()}</td>
                 </tr>
               ))}

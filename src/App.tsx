@@ -25,6 +25,15 @@ import AdminSettings from '@/pages/admin/AdminSettings';
 import PaymentResult from '@/pages/PaymentResult';
 import AdminPayments from '@/pages/admin/AdminPayments';
 import AdminProviders from '@/pages/admin/AdminProviders';
+import AdminCategories from '@/pages/admin/AdminCategories';
+import AdminMappings from '@/pages/admin/AdminMappings';
+import AdminRefunds from '@/pages/admin/AdminRefunds';
+import AdminRefills from '@/pages/admin/AdminRefills';
+import AdminReports from '@/pages/admin/AdminReports';
+import AdminAnnouncements from '@/pages/admin/AdminAnnouncements';
+import AdminSupportLinks from '@/pages/admin/AdminSupportLinks';
+import AdminRoles from '@/pages/admin/AdminRoles';
+import BulkOrder from '@/pages/dashboard/BulkOrder';
 
 import type { JSX } from 'react';
 
@@ -42,7 +51,7 @@ function ProtectedRoute({ children }: { children: JSX.Element }) {
 }
 
 function AdminRoute({ children }: { children: JSX.Element }) {
-    const { profile, loading } = useAuth();
+    const { profile, loading, isStaff } = useAuth();
     if (loading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-bg-base">
@@ -50,7 +59,14 @@ function AdminRoute({ children }: { children: JSX.Element }) {
             </div>
         );
     }
-    if (!profile || (profile as any).role !== 'admin') return <Navigate to="/dashboard" replace />;
+    if (!profile || !isStaff) return <Navigate to="/dashboard" replace />;
+    return children;
+}
+
+// Yalnızca arayüzü gizlemekle kalmaz: izin yoksa sayfa hiç açılmaz (asıl koruma veritabanı RLS/RPC'sindedir)
+function Guard({ perm, children }: { perm: string; children: JSX.Element }) {
+    const { can } = useAuth();
+    if (!can(perm)) return <Navigate to="/admin" replace />;
     return children;
 }
 
@@ -85,6 +101,7 @@ function AppRoutes() {
                 <Route path="services" element={<Services />} />
                 <Route path="new-order" element={<NewOrder />} />
                 <Route path="orders" element={<Orders />} />
+                <Route path="bulk-order" element={<BulkOrder />} />
                 <Route path="add-funds" element={<AddFunds />} />
                 <Route path="transactions" element={<Transactions />} />
                 <Route path="support" element={<Support />} />
@@ -102,13 +119,21 @@ function AppRoutes() {
                 }
             >
                 <Route index element={<AdminDashboard />} />
-                <Route path="users" element={<AdminUsers />} />
-                <Route path="orders" element={<AdminOrders />} />
-                <Route path="deposits" element={<AdminDeposits />} />
-                <Route path="services" element={<AdminServices />} />
-                <Route path="payments" element={<AdminPayments />} />
-                <Route path="providers" element={<AdminProviders />} />
-                <Route path="settings" element={<AdminSettings />} />
+                <Route path="users" element={<Guard perm="users.view"><AdminUsers /></Guard>} />
+                <Route path="orders" element={<Guard perm="orders.view"><AdminOrders /></Guard>} />
+                <Route path="refunds" element={<Guard perm="orders.view"><AdminRefunds /></Guard>} />
+                <Route path="refills" element={<Guard perm="orders.view"><AdminRefills /></Guard>} />
+                <Route path="deposits" element={<Guard perm="deposits.review"><AdminDeposits /></Guard>} />
+                <Route path="payments" element={<Guard perm="payments.manage"><AdminPayments /></Guard>} />
+                <Route path="providers" element={<Guard perm="providers.manage"><AdminProviders /></Guard>} />
+                <Route path="services" element={<Guard perm="services.manage"><AdminServices /></Guard>} />
+                <Route path="categories" element={<Guard perm="services.manage"><AdminCategories /></Guard>} />
+                <Route path="mappings" element={<Guard perm="services.manage"><AdminMappings /></Guard>} />
+                <Route path="reports" element={<Guard perm="reports.view"><AdminReports /></Guard>} />
+                <Route path="announcements" element={<Guard perm="announcements.manage"><AdminAnnouncements /></Guard>} />
+                <Route path="support-links" element={<Guard perm="support_links.manage"><AdminSupportLinks /></Guard>} />
+                <Route path="roles" element={<Guard perm="roles.manage"><AdminRoles /></Guard>} />
+                <Route path="settings" element={<Guard perm="settings.manage"><AdminSettings /></Guard>} />
             </Route>
 
             <Route path="*" element={<Navigate to="/" replace />} />

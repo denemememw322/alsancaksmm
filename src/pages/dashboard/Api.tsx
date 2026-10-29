@@ -50,6 +50,26 @@ export default function Api() {
       title: 'Check Balance',
       body: { key: 'your-api-key', action: 'balance' },
     },
+    {
+      title: 'Custom Comments Order',
+      body: { key: 'your-api-key', action: 'add', service: 1, link: 'https://...', comments: 'comment 1\\ncomment 2' },
+    },
+    {
+      title: 'Multiple Order Status',
+      body: { key: 'your-api-key', action: 'status', orders: '1,2,3' },
+    },
+    {
+      title: 'Cancel Orders',
+      body: { key: 'your-api-key', action: 'cancel', orders: '1,2,3' },
+    },
+    {
+      title: 'Create Refill',
+      body: { key: 'your-api-key', action: 'refill', order: 1 },
+    },
+    {
+      title: 'Refill Status',
+      body: { key: 'your-api-key', action: 'refill_status', refill: 1 },
+    },
   ];
 
   return (

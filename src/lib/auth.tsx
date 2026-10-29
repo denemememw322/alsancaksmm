@@ -6,6 +6,9 @@ type AuthContextType = {
   session: Session | null;
   user: User | null;
   profile: Profile | null;
+  perms: string[];
+  can: (perm: string) => boolean;
+  isStaff: boolean;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string, username: string) => Promise<{ error: string | null }>;
@@ -19,6 +22,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [perms, setPerms] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = async (uid: string) => {
@@ -27,7 +31,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .select('*')
       .eq('user_id', uid)
       .maybeSingle();
-    if (!error && data) setProfile(data as Profile);
+    if (!error && data) {
+      setProfile(data as Profile);
+      const { data: p } = await supabase.rpc('my_permissions');
+      setPerms(Array.isArray(p) ? (p as string[]) : []);
+    }
     else if (error) {
       // profile may not exist yet if trigger hasn't fired; retry once
       await new Promise((r) => setTimeout(r, 600));
@@ -59,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await fetchProfile(newSession.user.id);
         } else {
           setProfile(null);
+          setPerms([]);
         }
         setLoading(false);
       })();
@@ -97,13 +106,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     await supabase.auth.signOut();
     setProfile(null);
+    setPerms([]);
     setUser(null);
     setSession(null);
   };
 
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, loading, signIn, signUp, signOut, refreshProfile }}
+      value={{ session, user, profile, perms, can: (perm: string) => perms.includes(perm), isStaff: perms.length > 0, loading, signIn, signUp, signOut, refreshProfile }}
     >
       {children}
     </AuthContext.Provider>

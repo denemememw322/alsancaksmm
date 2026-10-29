@@ -43,6 +43,8 @@ const stats = [
   { icon: Star, label: 'Avg. Rating', value: '4.9/5' },
 ];
 
+import SupportWidget from '@/components/SupportWidget';
+
 export default function Landing() {
   return (
     <div className="min-h-screen bg-bg-base overflow-x-hidden">
@@ -318,6 +320,7 @@ export default function Landing() {
           </div>
         </div>
       </footer>
+      <SupportWidget />
     </div>
   );
 }

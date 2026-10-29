@@ -1,28 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Pencil, Trash2, X, RefreshCw, Plug, Globe, Search, CheckCircle2, AlertCircle, Download } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { providerApi, type ProviderService } from '@/lib/providerApi';
 
 type Provider = { id: string; name: string; url: string; enabled: boolean };
-type PService = { id: string; name: string; category: string; rate: number; min: number; max: number; type: string; refill: boolean; cancel: boolean; dripfeed: boolean };
+type PService = ProviderService;
 type Msg = { ok: boolean; text: string } | null;
 
 const empty = { id: null as string | null, name: '', url: '', api_key: '', enabled: true };
 const input = 'w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border-default text-sm text-text-primary focus:outline-none focus:border-brand-500';
 const SHOW_LIMIT = 200;
 const CHUNK = 500;
-
-async function callApi(body: Record<string, unknown>) {
-  const { data: sess } = await supabase.auth.getSession();
-  const token = sess.session?.access_token;
-  const r = await fetch('/api/provider-action', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(body),
-  });
-  const data = await r.json().catch(() => null);
-  if (!r.ok || !data?.ok) throw new Error(data?.error || `Sunucu hatası (HTTP ${r.status})`);
-  return data;
-}
+const callApi = providerApi;
 
 export default function AdminProviders() {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -39,6 +28,8 @@ export default function AdminProviders() {
   const [category, setCategory] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [progress, setProgress] = useState<string | null>(null);
+  const [targetCat, setTargetCat] = useState('');
+  const [panelCats, setPanelCats] = useState<string[]>([]);
   const [validateId, setValidateId] = useState('');
   const [validateResult, setValidateResult] = useState<string | null>(null);
 
@@ -50,6 +41,7 @@ export default function AdminProviders() {
 
   useEffect(() => {
     load();
+    supabase.from('categories').select('name').order('sort_order').order('name').then(({ data }) => setPanelCats((data || []).map((c: any) => c.name)));
     supabase.from('settings').select('default_markup').eq('id', 1).maybeSingle().then(({ data }) => {
       if (data?.default_markup) setMarkup(Number(data.default_markup));
     });
@@ -142,21 +134,21 @@ export default function AdminProviders() {
     const provider = providers.find((p) => p.id === activeId);
     if (!provider) return;
     const items = services.filter((s) => selected.has(s.id)).map((s) => ({
-      id: s.id, name: s.name, category: s.category, rate: s.rate, min_order: s.min || 1, max_order: s.max || 100000,
+      id: s.id, name: s.name, category: s.category, rate: s.rate, min_order: s.min || 1, max_order: s.max || 100000, type: s.type, refill: s.refill, cancel: s.cancel,
     }));
     if (items.length === 0) return setMsg({ ok: false, text: 'En az 1 hizmet seç.' });
-    if (!window.confirm(`${items.length} hizmet "${provider.name}" sağlayıcısından içe aktarılsın mı?\nSatış fiyatı = maliyet × ${markup}. Mevcut hizmetlerde fiyat, kategori ve aktiflik durumun korunur.`)) return;
+    if (!window.confirm(`${items.length} hizmet "${provider.name}" sağlayıcısından içe aktarılsın mı?\nKategori: ${targetCat.trim() || 'platforma göre otomatik'}. Satış fiyatı = maliyet × ${markup}. Mevcut hizmetlerde fiyat, kategori ve aktiflik durumun korunur.`)) return;
     setMsg(null);
     let inserted = 0, updated = 0, skipped = 0;
     try {
       for (let i = 0; i < items.length; i += CHUNK) {
         setProgress(`${Math.min(i + CHUNK, items.length)} / ${items.length} aktarılıyor...`);
-        const { data, error } = await supabase.rpc('admin_import_services', { p_provider: provider.id, p_items: items.slice(i, i + CHUNK) });
+        const { data, error } = await supabase.rpc('admin_import_services', { p_provider: provider.id, p_items: items.slice(i, i + CHUNK), p_category: targetCat.trim() || null });
         if (error) throw new Error(error.message);
         if (data?.success === false) throw new Error(data.error);
         inserted += data.inserted; updated += data.updated; skipped += data.skipped;
       }
-      setMsg({ ok: true, text: `Tamamlandı: ${inserted} yeni, ${updated} güncellendi${skipped ? `, ${skipped} geçersiz satır atlandı` : ''}.` });
+      setMsg({ ok: true, text: `Tamamlandı: ${inserted} yeni eklendi, ${updated} güncellendi, ${skipped} atlandı, 0 başarısız. Yeni hizmetler aktif ve platform kategorisine yerleştirildi; Hizmetler sayfasından düzenleyebilirsin.` });
       clearSel();
     } catch (e: any) {
       setMsg({ ok: false, text: `İçe aktarma durdu (${inserted + updated} kayıt yazıldı): ${e.message}` });
@@ -256,6 +248,8 @@ export default function AdminProviders() {
                 <span className="text-text-secondary">{filtered.length} sonuç · <b className="text-brand-400">{selected.size}</b> seçili</span>
                 <button onClick={selectFiltered} className="text-xs text-brand-400">Filtredekilerin hepsini seç ({filtered.length})</button>
                 <button onClick={clearSel} className="text-xs text-text-muted">Seçimi temizle</button>
+                <input list="panel-cats" value={targetCat} onChange={(e) => setTargetCat(e.target.value)} placeholder="Hedef kategori (boş = otomatik platform)" className={`${input} max-w-[260px] text-xs`} />
+                <datalist id="panel-cats">{panelCats.map((c) => <option key={c} value={c} />)}</datalist>
                 <button onClick={importSelected} disabled={!selected.size || !!progress} className="ml-auto px-3 py-1.5 rounded-lg bg-success-600 text-white text-xs font-medium disabled:opacity-50 flex items-center gap-1.5">
                   <Download className="w-3.5 h-3.5" /> {progress ?? `Seçilenleri İçe Aktar (${selected.size})`}
                 </button>
@@ -267,7 +261,7 @@ export default function AdminProviders() {
                     className={`flex items-center justify-between gap-3 py-2 px-3 rounded-lg border cursor-pointer text-sm ${selected.has(s.id) ? 'bg-brand-500/10 border-brand-500/30' : 'border-border-subtle hover:border-border-default'}`}>
                     <div className="min-w-0">
                       <div className="text-text-primary truncate"><span className="text-text-muted">#{s.id}</span> {s.name}</div>
-                      <div className="text-xs text-text-muted truncate">{s.category} · {s.min}-{s.max}{s.refill ? ' · refill' : ''}{s.cancel ? ' · iptal' : ''}</div>
+                      <div className="text-xs text-text-muted truncate">{s.category} · {s.min}-{s.max}{s.type !== 'Default' ? ` · ${s.type}` : ''}{s.refill ? ' · refill' : ''}{s.cancel ? ' · iptal' : ''}</div>
                     </div>
                     <div className="text-right shrink-0 text-xs">
                       <div className="text-text-secondary">maliyet ${s.rate}</div>

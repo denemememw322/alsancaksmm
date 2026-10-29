@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { orderAction } from '@/lib/providerApi';
+import { cancelState, refillState } from '@/lib/orderRules';
 import { ListOrdered, Search, RefreshCw, Ban, RotateCcw, Check } from 'lucide-react';
 import { supabase, type Order } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
@@ -68,33 +70,34 @@ export default function Orders() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile]);
 
+  const [pendingCancel, setPendingCancel] = useState<Set<string>>(new Set());
+  const [pendingRefill, setPendingRefill] = useState<Set<string>>(new Set());
+  const loadPending = async () => {
+    const ids = orders.map((o) => o.id);
+    if (ids.length === 0) return;
+    const { data } = await supabase.from('order_actions').select('order_id,action').eq('status', 'pending').in('order_id', ids.slice(0, 500));
+    setPendingCancel(new Set((data || []).filter((a: any) => a.action === 'cancel').map((a: any) => a.order_id)));
+    setPendingRefill(new Set((data || []).filter((a: any) => a.action === 'refill').map((a: any) => a.order_id)));
+  };
+
+  useEffect(() => { loadPending(); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders.length]);
+  useEffect(() => { const t = setInterval(() => { loadOrders(); }, 60000); return () => clearInterval(t); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile]);
+
   const runAction = async (order: Order, type: 'cancel' | 'refill') => {
-    if (type === 'cancel' && !window.confirm(`Order #${order.order_id} iptal edilsin mi? Teslim edilmeyen kısım bakiyene iade edilecek.`)) {
+    if (type === 'cancel' && !window.confirm(`Order #${order.order_id} için iptal talebi sağlayıcıya gönderilsin mi? Sağlayıcı kabul ederse teslim edilmeyen kısım bakiyene iade edilir.`)) {
       return;
     }
     setActingId(order.id);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-      const res = await fetch('/api/order-action', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ order_id: order.id, type }),
-      });
-      const json = await res.json();
-      if (json.error) {
-        window.alert(json.error);
-      } else if (type === 'cancel') {
-        setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: 'Canceled' } : o)));
-        await refreshProfile();
-      } else {
-        setOrders((prev) =>
-          prev.map((o) => (o.id === order.id ? { ...o, refill_id: json.refill_id, refill_requested_at: new Date().toISOString() } : o))
-        );
-      }
+      const json = await orderAction(order.id, type);
+      window.alert(type === 'cancel'
+        ? (json.refund > 0 ? `İptal edildi, $${Number(json.refund).toFixed(4)} iade edildi.` : 'İptal talebi sağlayıcı tarafından kabul edildi. Sonuç ve iade birkaç dakika içinde otomatik işlenir.')
+        : `Refill talebi sağlayıcı tarafından kabul edildi (Refill ID: ${json.refill_id}).`);
+      await refreshProfile();
+      await loadPending();
+      loadOrders();
     } catch (e: any) {
       window.alert(e.message || 'Bir hata oluştu');
     }
@@ -195,8 +198,8 @@ export default function Orders() {
                 </tr>
               ) : (
                 filtered.map((o) => {
-                  const canCancel = !FINAL_STATUSES.includes(o.status);
-                  const canRefill = ['Completed', 'Partial'].includes(o.status) && !!o.provider_order_id;
+                  const cancelS = cancelState(o, pendingCancel);
+                  const refillS = refillState(o, pendingRefill);
                   const isActing = actingId === o.id;
                   return (
                     <tr key={o.id} className="border-b border-border-subtle hover:bg-bg-elevated transition-colors">
@@ -219,9 +222,9 @@ export default function Orders() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
-                          {canCancel && (
+                          {cancelS.allowed && (
                             <button
-                              title="Cancel order"
+                              title="Siparişi iptal et"
                               disabled={isActing}
                               onClick={() => runAction(o, 'cancel')}
                               className="p-1.5 rounded-lg text-text-muted hover:text-error-400 hover:bg-error-500/10 transition-colors disabled:opacity-50"
@@ -229,23 +232,19 @@ export default function Orders() {
                               <Ban className="w-4 h-4" />
                             </button>
                           )}
-                          {canRefill && (
-                            o.refill_requested_at ? (
-                              <span title="Refill requested" className="p-1.5 text-success-400">
-                                <Check className="w-4 h-4" />
-                              </span>
-                            ) : (
-                              <button
-                                title="Request refill"
-                                disabled={isActing}
-                                onClick={() => runAction(o, 'refill')}
-                                className="p-1.5 rounded-lg text-text-muted hover:text-brand-400 hover:bg-brand-500/10 transition-colors disabled:opacity-50"
-                              >
-                                <RotateCcw className="w-4 h-4" />
-                              </button>
-                            )
+                          {cancelS.pending && <span title="İptal talebi sağlayıcıda" className="text-[11px] px-1.5 py-0.5 rounded bg-warning-500/10 text-warning-400">İptal bekliyor</span>}
+                          {refillS.allowed && (
+                            <button
+                              title={refillS.lifetime ? 'Refill talep et (lifetime garanti)' : 'Refill talep et'}
+                              disabled={isActing}
+                              onClick={() => runAction(o, 'refill')}
+                              className="p-1.5 rounded-lg text-text-muted hover:text-brand-400 hover:bg-brand-500/10 transition-colors disabled:opacity-50"
+                            >
+                              <RotateCcw className="w-4 h-4" />
+                            </button>
                           )}
-                          {!canCancel && !canRefill && <span className="text-text-muted">—</span>}
+                          {refillS.pending && <span title="Refill talebi sağlayıcıda" className="text-[11px] px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-400">Refill bekliyor</span>}
+                          {!cancelS.allowed && !cancelS.pending && !refillS.allowed && !refillS.pending && <span className="text-text-muted">—</span>}
                         </div>
                       </td>
                     </tr>

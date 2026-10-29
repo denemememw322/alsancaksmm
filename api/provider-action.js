@@ -1,82 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
-import dns from 'node:dns/promises';
-import net from 'node:net';
+import { HttpError, callProvider, providerError, isPrivateIp, assertSafeUrl } from './_lib/provider-http.js';
+
+async function callChecked(provider, params) {
+  const r = await callProvider(provider, params);
+  const err = providerError(r.data);
+  if (err) throw new HttpError(502, `Sağlayıcı hatası: ${r.scrub(err).slice(0, 200)}`);
+  return r;
+}
 
 // Yönetici sağlayıcı işlemleri: bağlantı testi, hizmet listesi, hizmet ID doğrulama.
 // - Yalnızca admin çağırabilir (Supabase oturum jetonu doğrulanır).
 // - Sağlayıcı API anahtarı sunucuda veritabanından okunur, tarayıcıya hiç gönderilmez.
 // - Yalnızca https ve genel (özel ağ olmayan) adresler çağrılır (SSRF koruması).
-
-class HttpError extends Error {
-  constructor(status, message) { super(message); this.status = status; }
-}
-
-function isPrivateIp(ip) {
-  if (net.isIPv4(ip)) {
-    const [a, b] = ip.split('.').map(Number);
-    return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31)
-      || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
-  }
-  if (net.isIPv6(ip)) {
-    const v = ip.toLowerCase();
-    if (v === '::1' || v === '::') return true;
-    if (v.startsWith('::ffff:')) return isPrivateIp(v.slice(7));
-    return v.startsWith('fc') || v.startsWith('fd') || v.startsWith('fe8') || v.startsWith('fe9') || v.startsWith('fea') || v.startsWith('feb');
-  }
-  return true;
-}
-
-async function assertSafeUrl(raw) {
-  let url;
-  try { url = new URL(String(raw).trim()); } catch { throw new HttpError(400, 'Geçersiz API URL.'); }
-  if (url.protocol !== 'https:') throw new HttpError(400, 'API URL https:// ile başlamalı.');
-  if (url.username || url.password) throw new HttpError(400, 'API URL kullanıcı adı/parola içeremez.');
-  let addrs;
-  try { addrs = await dns.lookup(url.hostname, { all: true }); }
-  catch { throw new HttpError(502, `Alan adı çözümlenemedi: ${url.hostname}`); }
-  if (!addrs.length || addrs.some((a) => isPrivateIp(a.address))) {
-    throw new HttpError(400, 'API URL özel/yerel bir ağ adresine çözümleniyor, reddedildi.');
-  }
-  return url;
-}
-
-async function callProvider(provider, params) {
-  const url = await assertSafeUrl(provider.url);
-  const body = new URLSearchParams({ key: provider.api_key, ...params });
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 25000);
-  const started = Date.now();
-  let resp;
-  try {
-    resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-      body,
-      redirect: 'manual',
-      signal: ctrl.signal,
-    });
-  } catch (e) {
-    throw new HttpError(502, e.name === 'AbortError'
-      ? 'Sağlayıcı 25 saniyede yanıt vermedi (zaman aşımı).'
-      : `Sağlayıcıya bağlanılamadı: ${e.cause?.code || e.message}`);
-  } finally {
-    clearTimeout(timer);
-  }
-  if (resp.status >= 300 && resp.status < 400) {
-    throw new HttpError(502, `Sağlayıcı yönlendirme döndürdü (HTTP ${resp.status}). API URL adresini kontrol et.`);
-  }
-  const text = await resp.text();
-  const scrub = (s) => s.split(provider.api_key).join('***');
-  let data;
-  try { data = JSON.parse(text); }
-  catch { throw new HttpError(502, `Sağlayıcı JSON döndürmedi (HTTP ${resp.status}). Yanıtın başı: ${scrub(text.slice(0, 160))}`); }
-  if (data && !Array.isArray(data) && data.error) {
-    const e = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
-    throw new HttpError(502, `Sağlayıcı hatası: ${scrub(e).slice(0, 200)}`);
-  }
-  if (!resp.ok) throw new HttpError(502, `Sağlayıcı HTTP ${resp.status} döndürdü.`);
-  return { data, ms: Date.now() - started };
-}
 
 function extractList(data) {
   if (Array.isArray(data)) return data;
@@ -124,8 +59,8 @@ export default async function handler(req, res) {
     if (!token) throw new HttpError(401, 'Oturum bulunamadı.');
     const { data: userData, error: userErr } = await db.auth.getUser(token);
     if (userErr || !userData?.user) throw new HttpError(401, 'Geçersiz oturum.');
-    const { data: caller } = await db.from('profiles').select('role,banned').eq('user_id', userData.user.id).maybeSingle();
-    if (!caller || caller.role !== 'admin' || caller.banned) throw new HttpError(403, 'Bu işlem için admin yetkisi gerekli.');
+    const { data: allowed } = await db.rpc('has_perm_for', { p_uid: userData.user.id, p: 'providers.manage' });
+    if (!allowed) throw new HttpError(403, 'Bu işlem için providers.manage izni gerekli.');
 
     const { action, provider_id: providerId, service_id: serviceId } = req.body || {};
     if (!providerId) throw new HttpError(400, 'provider_id gerekli.');
@@ -134,12 +69,12 @@ export default async function handler(req, res) {
     if (!provider.api_key) throw new HttpError(400, 'Bu sağlayıcı için API anahtarı kayıtlı değil.');
 
     if (action === 'test') {
-      const { data, ms } = await callProvider(provider, { action: 'balance' });
+      const { data, ms } = await callChecked(provider, { action: 'balance' });
       return res.status(200).json({ ok: true, balance: data.balance ?? null, currency: data.currency ?? null, latency_ms: ms });
     }
 
     if (action === 'services' || action === 'validate') {
-      const { data, ms } = await callProvider(provider, { action: 'services' });
+      const { data, ms } = await callChecked(provider, { action: 'services' });
       const list = extractList(data).map(normalize).filter((s) => s.id && s.name);
       if (list.length === 0) throw new HttpError(502, 'Sağlayıcı hizmet listesi boş döndürdü veya biçimi tanınmadı.');
       if (action === 'services') return res.status(200).json({ ok: true, count: list.length, latency_ms: ms, services: list });

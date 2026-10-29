@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { RefreshCw, Ban, RotateCcw, Check, Pencil, X, Search } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { orderAction } from '@/lib/providerApi';
+import { cancelState, refillState } from '@/lib/orderRules';
 
 const FINAL_STATUSES = ['Completed', 'Canceled', 'Refunded'];
 
@@ -123,32 +125,32 @@ export default function AdminOrders() {
     return matchStatus && matchSearch;
   });
 
+  const [pendingCancel, setPendingCancel] = useState<Set<string>>(new Set());
+  const [pendingRefill, setPendingRefill] = useState<Set<string>>(new Set());
+  const loadPending = async () => {
+    const ids = orders.map((o: any) => o.id);
+    if (ids.length === 0) return;
+    const { data } = await supabase.from('order_actions').select('order_id,action').eq('status', 'pending').in('order_id', ids.slice(0, 500));
+    setPendingCancel(new Set((data || []).filter((a: any) => a.action === 'cancel').map((a: any) => a.order_id)));
+    setPendingRefill(new Set((data || []).filter((a: any) => a.action === 'refill').map((a: any) => a.order_id)));
+  };
+
+  useEffect(() => { loadPending(); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders.length]);
+
   const runAction = async (order: any, type: 'cancel' | 'refill') => {
-    if (type === 'cancel' && !window.confirm(`Order #${order.order_id} iptal edilsin mi? Teslim edilmeyen kısım müşterinin bakiyesine iade edilecek.`)) {
+    if (type === 'cancel' && !window.confirm(`Order #${order.order_id} için iptal talebi sağlayıcıya gönderilsin mi? Sağlayıcı kabul ederse teslim edilmeyen kısım bakiyene iade edilir.`)) {
       return;
     }
     setActingId(order.id);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-      const res = await fetch('/api/order-action', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ order_id: order.id, type }),
-      });
-      const json = await res.json();
-      if (json.error) {
-        window.alert(json.error);
-      } else if (type === 'cancel') {
-        setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: 'Canceled' } : o)));
-      } else {
-        setOrders((prev) =>
-          prev.map((o) => (o.id === order.id ? { ...o, refill_id: json.refill_id, refill_requested_at: new Date().toISOString() } : o))
-        );
-      }
+      const json = await orderAction(order.id, type);
+      window.alert(type === 'cancel'
+        ? (json.refund > 0 ? `İptal edildi, $${Number(json.refund).toFixed(4)} iade edildi.` : 'İptal talebi sağlayıcı tarafından kabul edildi. Sonuç ve iade birkaç dakika içinde otomatik işlenir.')
+        : `Refill talebi sağlayıcı tarafından kabul edildi (Refill ID: ${json.refill_id}).`);
+      
+      await loadPending();
+      loadOrders();
     } catch (e: any) {
       window.alert(e.message || 'Bir hata oluştu');
     }
@@ -218,8 +220,8 @@ export default function AdminOrders() {
                 <tr><td colSpan={10} className="px-4 py-8 text-center text-text-muted">No orders found</td></tr>
               ) : (
                 filteredOrders.map((order) => {
-                  const canCancel = !FINAL_STATUSES.includes(order.status);
-                  const canRefill = ['Completed', 'Partial'].includes(order.status) && !!order.provider_order_id;
+                  const cancelS = cancelState(order, pendingCancel);
+                  const refillS = refillState(order, pendingRefill);
                   const isActing = actingId === order.id;
                   return (
                     <tr key={order.id} className="border-b border-border-subtle">
@@ -292,9 +294,9 @@ export default function AdminOrders() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
-                          {canCancel && (
+                          {cancelS.allowed && (
                             <button
-                              title="Cancel order"
+                              title="Siparişi iptal et"
                               disabled={isActing}
                               onClick={() => runAction(order, 'cancel')}
                               className="p-1.5 rounded-lg text-text-muted hover:text-error-400 hover:bg-error-500/10 transition-colors disabled:opacity-50"
@@ -302,23 +304,19 @@ export default function AdminOrders() {
                               <Ban className="w-4 h-4" />
                             </button>
                           )}
-                          {canRefill && (
-                            order.refill_requested_at ? (
-                              <span title="Refill requested" className="p-1.5 text-success-400">
-                                <Check className="w-4 h-4" />
-                              </span>
-                            ) : (
-                              <button
-                                title="Request refill"
-                                disabled={isActing}
-                                onClick={() => runAction(order, 'refill')}
-                                className="p-1.5 rounded-lg text-text-muted hover:text-brand-400 hover:bg-brand-500/10 transition-colors disabled:opacity-50"
-                              >
-                                <RotateCcw className="w-4 h-4" />
-                              </button>
-                            )
+                          {cancelS.pending && <span title="İptal talebi sağlayıcıda" className="text-[11px] px-1.5 py-0.5 rounded bg-warning-500/10 text-warning-400">İptal bekliyor</span>}
+                          {refillS.allowed && (
+                            <button
+                              title={refillS.lifetime ? 'Refill talep et (lifetime garanti)' : 'Refill talep et'}
+                              disabled={isActing}
+                              onClick={() => runAction(order, 'refill')}
+                              className="p-1.5 rounded-lg text-text-muted hover:text-brand-400 hover:bg-brand-500/10 transition-colors disabled:opacity-50"
+                            >
+                              <RotateCcw className="w-4 h-4" />
+                            </button>
                           )}
-                          {!canCancel && !canRefill && <span className="text-text-muted">—</span>}
+                          {refillS.pending && <span title="Refill talebi sağlayıcıda" className="text-[11px] px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-400">Refill bekliyor</span>}
+                          {!cancelS.allowed && !cancelS.pending && !refillS.allowed && !refillS.pending && <span className="text-text-muted">—</span>}
                         </div>
                       </td>
                     </tr>

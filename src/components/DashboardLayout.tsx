@@ -3,15 +3,18 @@ import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
 import {
   TrendingUp, LayoutDashboard, Package, ShoppingCart, ListOrdered,
   Wallet, Receipt, LifeBuoy, Gift, LogOut, Menu, X, Wallet as WalletIcon,
-  Shield, Webhook,
+  Shield, Webhook, Layers,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
+import SupportWidget from '@/components/SupportWidget';
+import AnnouncementsBanner from '@/components/AnnouncementsBanner';
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/dashboard/services', label: 'Services', icon: Package },
   { to: '/dashboard/new-order', label: 'New Order', icon: ShoppingCart },
   { to: '/dashboard/orders', label: 'My Orders', icon: ListOrdered },
+  { to: '/dashboard/bulk-order', label: 'Bulk Order', icon: Layers },
   { to: '/dashboard/add-funds', label: 'Add Funds', icon: Wallet },
   { to: '/dashboard/transactions', label: 'Transactions', icon: Receipt },
   { to: '/dashboard/affiliate', label: 'Affiliate', icon: Gift },
@@ -20,7 +23,7 @@ const navItems = [
 ];
 
 export default function DashboardLayout() {
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, isStaff } = useAuth();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -30,7 +33,7 @@ export default function DashboardLayout() {
   };
 
   const balance = profile?.balance ?? 0;
-  const isAdmin = (profile as any)?.role === 'admin';
+  const isAdmin = isStaff;
 
   const allNavItems = isAdmin 
     ? [...navItems, { to: '/admin', label: 'Admin Panel', icon: Shield }]
@@ -130,8 +133,10 @@ export default function DashboardLayout() {
         </header>
 
         <main className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+          <AnnouncementsBanner />
           <Outlet />
         </main>
+      <SupportWidget />
       </div>
     </div>
   );

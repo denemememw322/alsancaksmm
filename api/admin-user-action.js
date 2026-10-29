@@ -25,15 +25,8 @@ export default async function handler(req, res) {
     const { data: userData, error: userError } = await db.auth.getUser(token);
     if (userError || !userData?.user) return res.status(401).json({ error: 'Invalid session' });
 
-    const { data: callerProfile } = await db
-      .from('profiles')
-      .select('role')
-      .eq('user_id', userData.user.id)
-      .maybeSingle();
-
-    if (callerProfile?.role !== 'admin') {
-      return res.status(403).json({ error: 'Not authorized' });
-    }
+    const { data: allowed } = await db.rpc('has_perm_for', { p_uid: userData.user.id, p: 'users.manage' });
+    if (!allowed) return res.status(403).json({ error: 'Bu işlem için users.manage izni gerekli' });
 
     const { target_user_id, action } = req.body || {};
     if (!target_user_id || !['ban', 'unban', 'delete'].includes(action)) {

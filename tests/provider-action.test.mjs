@@ -74,3 +74,34 @@ test('oturum jetonu yoksa 401 döner', async () => {
   await handler({ method: 'POST', headers: {}, body: { action: 'test', provider_id: 'p' } }, res);
   assert.equal(res.code, 401);
 });
+
+import { callProvider, providerError } from '../api/_lib/provider-http.js';
+
+test('callProvider: JSON olmayan yanıt gerçek nedenle bildirilir, anahtar sızmaz', async () => {
+  const fetchImpl = async () => new Response('<html>Cloudflare KEY123 blocked</html>', { status: 403 });
+  await assert.rejects(callProvider({ url: 'https://x.test/api', api_key: 'KEY123' }, { action: 'balance' }, { fetchImpl, skipDns: true }),
+    (e) => /JSON döndürmedi/.test(e.message) && !e.message.includes('KEY123'));
+});
+
+test('callProvider: yönlendirme ve zaman aşımı net hata verir', async () => {
+  await assert.rejects(callProvider({ url: 'https://x.test/api', api_key: 'K' }, {}, { skipDns: true, fetchImpl: async () => new Response('', { status: 301 }) }), /yönlendirme/);
+  await assert.rejects(callProvider({ url: 'https://x.test/api', api_key: 'K' }, {}, { skipDns: true, timeoutMs: 20,
+    fetchImpl: (_u, { signal }) => new Promise((_, rej) => signal.addEventListener('abort', () => rej(Object.assign(new Error('abort'), { name: 'AbortError' })))) }), /zaman aşımı/);
+});
+
+test('providerError: farklı hata biçimleri', () => {
+  assert.equal(providerError({ error: 'Incorrect service ID' }), 'Incorrect service ID');
+  assert.equal(providerError({ error: { code: 1 } }), '{"code":1}');
+  assert.equal(providerError([{ order: 1 }]), null);
+  assert.equal(providerError({ balance: '1' }), null);
+});
+
+test('callProvider: gövdeye key ve parametreler form olarak eklenir', async () => {
+  let sent;
+  const fetchImpl = async (_u, init) => { sent = init; return new Response('{"balance":"1.5","currency":"USD"}', { status: 200 }); };
+  const r = await callProvider({ url: 'https://x.test/api', api_key: 'SECRET' }, { action: 'balance' }, { fetchImpl, skipDns: true });
+  assert.equal(r.data.balance, '1.5');
+  assert.equal(sent.headers['Content-Type'], 'application/x-www-form-urlencoded');
+  assert.equal(new URLSearchParams(sent.body.toString()).get('key'), 'SECRET');
+  assert.equal(new URLSearchParams(sent.body.toString()).get('action'), 'balance');
+});
