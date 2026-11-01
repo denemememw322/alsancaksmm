@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase';
 import { Link, useNavigate } from 'react-router-dom';
 import { User, Mail, Lock, ArrowRight, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
@@ -12,10 +13,23 @@ export default function SignUp() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [uState, setUState] = useState<{ tone: 'ok' | 'bad' | 'muted'; text: string }>({ tone: 'muted', text: '3-20 karakter: harf, rakam ve _' });
+
+  // kullanıcı adı müsaitliği (yazarken, gecikmeli); kesin kontrol kayıtta sunucuda tekrar yapılır
+  useEffect(() => {
+    const v = username.trim();
+    if (!v) { setUState({ tone: 'muted', text: '3-20 karakter: harf, rakam ve _' }); return; }
+    const t = setTimeout(async () => {
+      const { data } = await supabase.rpc('username_available', { p_username: v });
+      setUState(data?.available ? { tone: 'ok', text: 'Bu kullanıcı adı müsait ✓' } : { tone: 'bad', text: data?.reason || 'Kullanıcı adı kullanılamaz' });
+    }, 350);
+    return () => clearTimeout(t);
+  }, [username]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (uState.tone === 'bad') { setError(uState.text); return; }
     if (password.length < 6) {
       setError('Password must be at least 6 characters');
       return;
@@ -36,7 +50,7 @@ export default function SignUp() {
             <span>{error}</span>
           </div>
         )}
-        <Field icon={User} label="Username" type="text" value={username} onChange={setUsername} placeholder="yourname" />
+        <Field icon={User} label="Username" type="text" value={username} onChange={setUsername} placeholder="yourname" autoComplete="username" hint={uState.text} hintTone={uState.tone} />
         <Field icon={Mail} label="Email" type="email" value={email} onChange={setEmail} placeholder="you@example.com" />
         <Field icon={Lock} label="Password" type="password" value={password} onChange={setPassword} placeholder="••••••••" />
         <button

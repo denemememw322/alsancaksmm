@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { MessageCircle, X, Send, Mail, Phone, Globe, Camera, MessageSquare } from 'lucide-react';
+import { MessageCircle, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { PLATFORM_ICONS, PLATFORM_COLORS } from '@/components/BrandIcons';
 
 type L = { id: string; platform: string; name: string; label: string; url: string };
-const icons: Record<string, any> = { whatsapp: MessageCircle, telegram: Send, email: Mail, phone: Phone, instagram: Camera, discord: MessageSquare, website: Globe, other: Globe };
-const colors: Record<string, string> = { whatsapp: 'bg-[#25D366]', telegram: 'bg-[#229ED9]', discord: 'bg-[#5865F2]', instagram: 'bg-[#E1306C]' };
 
 // Yalnızca yöneticinin etkinleştirdiği ve iletişim bilgisi dolu bağlantılar gelir (URL sunucuda üretilir).
+// Her bağlantı kendi platformunun ikonunu ve rengini kullanır.
 export default function SupportWidget() {
   const [links, setLinks] = useState<L[]>([]);
   const [open, setOpen] = useState(false);
@@ -20,11 +20,13 @@ export default function SupportWidget() {
         <div className="w-72 max-w-[calc(100vw-2rem)] rounded-2xl bg-bg-surface border border-border-subtle shadow-2xl p-3 space-y-2">
           <div className="text-sm font-semibold text-text-primary px-1">Canlı destek</div>
           {links.map((l) => {
-            const Icon = icons[l.platform] || Globe;
+            const Icon = PLATFORM_ICONS[l.platform] || PLATFORM_ICONS.other;
             return (
               <a key={l.id} href={l.url} target={l.url.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer"
                 className="flex items-center gap-3 p-2.5 rounded-xl bg-bg-elevated hover:bg-bg-hover transition-colors">
-                <span className={`w-9 h-9 rounded-lg flex items-center justify-center text-white shrink-0 ${colors[l.platform] || 'bg-brand-600'}`}><Icon className="w-4 h-4" /></span>
+                <span className="w-9 h-9 rounded-lg flex items-center justify-center text-white shrink-0" style={{ backgroundColor: PLATFORM_COLORS[l.platform] || '#64748B' }}>
+                  <Icon className="w-5 h-5" />
+                </span>
                 <span className="text-sm text-text-primary truncate">{l.label}</span>
               </a>
             );

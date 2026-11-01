@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, ExternalLink } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { PLATFORM_ICONS, PLATFORM_COLORS } from '@/components/BrandIcons';
 import { Badge, Modal, NoticeBar, btnGhost, btnPrimary, inputCls, type Notice } from '@/components/ui';
 
 export const PLATFORMS: Record<string, { label: string; hint: string }> = {
@@ -50,18 +51,22 @@ export default function AdminSupportLinks() {
       <div className="space-y-2">
         {rows.length === 0 && <div className="text-sm text-text-muted">Bağlantı yok. Eklediğin aktif bağlantılar sitede yüzen destek butonunda görünür.</div>}
         {rows.map((r) => (<div key={r.id} className="p-3 sm:p-4 rounded-2xl bg-bg-surface border border-border-subtle flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0"><div className="flex items-center gap-2 flex-wrap"><span className="font-medium text-text-primary">{r.display_name}</span><Badge tone="brand">{PLATFORMS[r.platform]?.label}</Badge>
+          <div className="min-w-0 flex items-center gap-3"><span className="w-9 h-9 rounded-lg flex items-center justify-center text-white shrink-0" style={{ backgroundColor: PLATFORM_COLORS[r.platform] }}>{(() => { const I = PLATFORM_ICONS[r.platform]; return <I className="w-5 h-5" />; })()}</span><div className="min-w-0"><div className="flex items-center gap-2 flex-wrap"><span className="font-medium text-text-primary">{r.display_name}</span><Badge tone="brand">{PLATFORMS[r.platform]?.label}</Badge>
             <button onClick={() => toggle(r)}><Badge tone={r.is_active ? 'ok' : 'bad'}>{r.is_active ? 'Aktif' : 'Pasif'}</Badge></button></div>
-            <a href={previewUrl(r.platform, r.contact)} target="_blank" rel="noopener noreferrer" className="text-xs text-text-muted hover:text-brand-400 break-all inline-flex items-center gap-1">{previewUrl(r.platform, r.contact)} <ExternalLink className="w-3 h-3" /></a></div>
+            <a href={previewUrl(r.platform, r.contact)} target="_blank" rel="noopener noreferrer" className="text-xs text-text-muted hover:text-brand-400 break-all inline-flex items-center gap-1">{previewUrl(r.platform, r.contact)} <ExternalLink className="w-3 h-3" /></a></div></div>
           <div className="flex gap-1.5"><button className="p-2 rounded-lg bg-bg-elevated text-text-secondary" onClick={() => setF({ id: r.id, platform: r.platform, display_name: r.display_name, contact: r.contact, button_label: r.button_label || '', is_active: r.is_active, sort_order: r.sort_order })}><Pencil className="w-4 h-4" /></button>
             <button className="p-2 rounded-lg bg-error-500/10 text-error-400" onClick={() => del(r)}><Trash2 className="w-4 h-4" /></button></div></div>))}
       </div>
       <Modal open={!!f} onClose={() => setF(null)} title={f?.id ? 'Bağlantıyı düzenle' : 'Yeni destek bağlantısı'}>
         {f && <div className="space-y-3">
           <div className="grid sm:grid-cols-2 gap-3">
-            <div><label className="text-xs text-text-muted">Platform</label><select className={inputCls} value={f.platform} onChange={(e) => setF({ ...f, platform: e.target.value, display_name: f.display_name || PLATFORMS[e.target.value].label })}>
+            <div><label className="text-xs text-text-muted">Platform</label><select className={inputCls} value={f.platform} onChange={(e) => {
+                const next = e.target.value;
+                const isDefault = !f.display_name.trim() || Object.values(PLATFORMS).some((p) => p.label === f.display_name.trim());
+                setF({ ...f, platform: next, display_name: isDefault ? PLATFORMS[next].label : f.display_name });
+              }}>
               {Object.entries(PLATFORMS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
-            <div><label className="text-xs text-text-muted">Görünen ad</label><input className={inputCls} value={f.display_name} onChange={(e) => setF({ ...f, display_name: e.target.value })} /></div>
+            <div><label className="text-xs text-text-muted">Görünen ad <span className="text-text-muted">(platformu değiştirince varsayılan ad otomatik güncellenir; kendi yazdığın ad korunur)</span></label><input className={inputCls} value={f.display_name} onChange={(e) => setF({ ...f, display_name: e.target.value })} /></div>
             <div className="sm:col-span-2"><label className="text-xs text-text-muted">İletişim bilgisi · {PLATFORMS[f.platform].hint}</label><input className={inputCls} value={f.contact} onChange={(e) => setF({ ...f, contact: e.target.value })} /></div>
             <div><label className="text-xs text-text-muted">Buton etiketi (opsiyonel)</label><input className={inputCls} value={f.button_label} onChange={(e) => setF({ ...f, button_label: e.target.value })} /></div>
             <div><label className="text-xs text-text-muted">Sıra</label><input type="number" className={inputCls} value={f.sort_order} onChange={(e) => setF({ ...f, sort_order: Number(e.target.value) })} /></div>

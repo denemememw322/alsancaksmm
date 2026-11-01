@@ -10,7 +10,7 @@ type AuthContextType = {
   can: (perm: string) => boolean;
   isStaff: boolean;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signIn: (identifier: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string, username: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -76,29 +76,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => listener.subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => { if (e.persisted && user) fetchProfile(user.id); };
+    window.addEventListener('pageshow', onShow);
+    return () => window.removeEventListener('pageshow', onShow);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
   const refreshProfile = async () => {
     if (user) await fetchProfile(user.id);
   };
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error?.message ?? null };
+  // E-posta ile giriş mevcut yöntemle aynen sürer. Kullanıcı adıyla girişte ad -> e-posta çözümlemesi SUNUCUDA yapılır
+  // (e-posta tarayıcıya dönmez); şifre doğrulamasını Supabase Auth yapar, hata mesajı hesap var/yok bilgisi sızdırmaz.
+  const signIn = async (identifier: string, password: string) => {
+    const id = identifier.trim();
+    if (id.includes('@')) {
+      const { error } = await supabase.auth.signInWithPassword({ email: id, password });
+      return { error: error?.message ?? null };
+    }
+    try {
+      const r = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/login-with-username`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: import.meta.env.VITE_SUPABASE_ANON_KEY },
+        body: JSON.stringify({ identifier: id, password }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.access_token) return { error: j.error || 'Giriş yapılamadı' };
+      const { error } = await supabase.auth.setSession({ access_token: j.access_token, refresh_token: j.refresh_token });
+      return { error: error?.message ?? null };
+    } catch {
+      return { error: 'Bağlantı hatası, tekrar dene' };
+    }
   };
 
   const signUp = async (email: string, password: string, username: string) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { username } },
-    });
-    if (error) return { error: error.message };
-    if (data.user) {
-      // ensure profile row with username
-      await new Promise((r) => setTimeout(r, 800));
-      await supabase
-        .from('profiles')
-        .update({ username })
-        .eq('user_id', data.user.id);
+    const name = username.trim();
+    const { data: chk } = await supabase.rpc('username_available', { p_username: name });
+    if (chk && chk.available === false) return { error: chk.reason || 'Bu kullanıcı adı kullanılamaz' };
+    const { error } = await supabase.auth.signUp({ email, password, options: { data: { username: name } } });
+    if (error) {
+      // yarış durumunda (aynı anda aynı ad) veritabanı benzersizlik kuralı devreye girer
+      if (/database error saving new user/i.test(error.message)) return { error: 'Hesap oluşturulamadı: kullanıcı adı az önce başkası tarafından alınmış olabilir. Başka bir ad dene.' };
+      return { error: error.message };
     }
     return { error: null };
   };

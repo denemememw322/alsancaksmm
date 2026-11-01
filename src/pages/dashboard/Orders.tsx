@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useUrlState, useUrlPage } from '@/lib/useUrlState';
 import { orderAction } from '@/lib/providerApi';
 import { cancelState, refillState } from '@/lib/orderRules';
 import { ListOrdered, Search, RefreshCw, Ban, RotateCcw, Check } from 'lucide-react';
@@ -14,8 +15,8 @@ export default function Orders() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
+  const [search, setSearch] = useUrlState('q');
+  const [statusFilter, setStatusFilter] = useUrlState('status', 'All');
 
   const syncStatuses = async (list: Order[]) => {
     const idsToSync = list

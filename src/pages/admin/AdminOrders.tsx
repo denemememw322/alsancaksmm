@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useUrlState, useUrlPage } from '@/lib/useUrlState';
 import { RefreshCw, Ban, RotateCcw, Check, Pencil, X, Search } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { orderAction } from '@/lib/providerApi';
@@ -31,8 +32,8 @@ export default function AdminOrders() {
   const [editingStatusId, setEditingStatusId] = useState<string | null>(null);
   const [editingStartId, setEditingStartId] = useState<string | null>(null);
   const [startValue, setStartValue] = useState('');
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
+  const [search, setSearch] = useUrlState('q');
+  const [statusFilter, setStatusFilter] = useUrlState('status', 'All');
 
   const syncStatuses = async (list: any[]) => {
     const idsToSync = list

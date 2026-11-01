@@ -1,9 +1,71 @@
 {
     "rewrites": [
-        { "source": "/api/v2/:path*", "destination": "/api/v2" },
-        { "source": "/api/v1/:path*", "destination": "/api/v2" },
-        { "source": "/v2/:path*", "destination": "/api/v2" },
-        { "source": "/api", "destination": "/api/v2" },
-        { "source": "/((?!api/).*)", "destination": "/index.html" }
+        {
+            "source": "/api/v2/:path*",
+            "destination": "/api/v2"
+        },
+        {
+            "source": "/api/v1/:path*",
+            "destination": "/api/v2"
+        },
+        {
+            "source": "/v2/:path*",
+            "destination": "/api/v2"
+        },
+        {
+            "source": "/api",
+            "destination": "/api/v2"
+        },
+        {
+            "source": "/((?!api/).*)",
+            "destination": "/index.html"
+        }
+    ],
+    "headers": [
+        {
+            "source": "/index.html",
+            "headers": [
+                {
+                    "key": "Cache-Control",
+                    "value": "no-cache, no-store, must-revalidate"
+                }
+            ]
+        },
+        {
+            "source": "/",
+            "headers": [
+                {
+                    "key": "Cache-Control",
+                    "value": "no-cache, no-store, must-revalidate"
+                }
+            ]
+        },
+        {
+            "source": "/((?!assets/|api/).*)",
+            "headers": [
+                {
+                    "key": "Cache-Control",
+                    "value": "no-cache, no-store, must-revalidate"
+                }
+            ]
+        },
+        {
+            "source": "/assets/(.*)",
+            "headers": [
+                {
+                    "key": "Cache-Control",
+                    "value": "public, max-age=31536000, immutable"
+                }
+            ]
+        },
+        {
+            "source": "/api/(.*)",
+            "headers": [
+                {
+                    "key": "Cache-Control",
+                    "value": "no-store"
+                }
+            ]
+        }
     ]
 }

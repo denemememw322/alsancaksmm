@@ -36,9 +36,12 @@ export default function NewOrder() {
           return { data: all };
         })(),
       ]);
+      // kullanıcıya özel fiyatlar (RLS: yalnızca kendi kayıtların) genel fiyatın yerine gösterilir/uygulanır
+      const { data: mine } = await supabase.from('user_service_prices').select('service_id,price');
+      const custom = new Map((mine || []).map((m: any) => [m.service_id, Number(m.price)]));
       const hidden = new Set((cats || []).filter((c: any) => !c.is_active).map((c: any) => c.name));
       setCatOrder(Object.fromEntries((cats || []).map((c: any) => [c.name, c.sort_order])));
-      setServices((svc || []).filter((s) => !hidden.has(s.category)));
+      setServices((svc || []).filter((s) => !hidden.has(s.category)).map((s) => (custom.has(s.id) ? { ...s, rate_per_1000: custom.get(s.id)!, price: custom.get(s.id)! } : s)));
       setLoading(false);
     })();
   }, []);

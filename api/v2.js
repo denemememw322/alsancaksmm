@@ -63,11 +63,16 @@ export async function handleAction(db, params, deps = {}) {
 
   if (action === 'services') {
     const rows = await fetchAll(() => db.from('services')
-      .select('service_id,name,category,rate_per_1000,min_order,max_order,service_type,refill_enabled,cancel_enabled')
+      .select('id,service_id,name,category,rate_per_1000,min_order,max_order,service_type,refill_enabled,cancel_enabled,visibility')
       .eq('is_active', true).order('category').order('service_id'));
-    return rows.map((s) => ({
+    // Erişim ve fiyat kuralları arayüzdekiyle aynı: özel hizmetler yalnızca atanan kullanıcıya, özel fiyat yalnızca sahibine
+    const { data: acc } = await db.from('service_access').select('service_id').eq('user_id', profile.user_id);
+    const { data: prices } = await db.from('user_service_prices').select('service_id,price').eq('user_id', profile.user_id);
+    const allowed = new Set((acc || []).map((a) => a.service_id));
+    const custom = new Map((prices || []).map((p) => [p.service_id, p.price]));
+    return rows.filter((s) => s.visibility !== 'private' || allowed.has(s.id)).map((s) => ({
       service: s.service_id, name: s.name, type: s.service_type || 'Default', category: s.category,
-      rate: money(s.rate_per_1000), min: String(s.min_order), max: String(s.max_order),
+      rate: money(custom.get(s.id) ?? s.rate_per_1000), min: String(s.min_order), max: String(s.max_order),
       dripfeed: false, refill: !!s.refill_enabled, cancel: !!s.cancel_enabled,
     }));
   }

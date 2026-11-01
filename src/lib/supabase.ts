@@ -60,6 +60,11 @@ export type Service = {
   min_price?: number;
   round_to?: number;
   provider_missing_at?: string | null;
+  auto_pricing?: boolean;
+  pricing_ratio?: number | null;
+  visibility?: 'public' | 'private';
+  missing_count?: number;
+  auto_disabled?: boolean;
 };
 
 export const CUSTOM_TYPES = ['Custom Comments', 'Custom Comments Package'];

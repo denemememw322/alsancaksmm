@@ -51,6 +51,19 @@ test('services: yalnızca aktif hizmetler, standart tür, string rate, refill/ca
   assert.ok(list.every((s) => s.type !== 'API'), 'tür asla "API" olmamalı');
 });
 
+test('services: özel hizmet yalnızca atanan kullanıcıya görünür, özel fiyat yalnızca sahibine uygulanır', async () => {
+  const services = [
+    { id: 's-pub', service_id: 1, name: 'Herkese açık', category: 'C', rate_per_1000: 1, min_order: 1, max_order: 9, service_type: 'Default', is_active: true, visibility: 'public' },
+    { id: 's-priv', service_id: 2, name: 'Özel', category: 'C', rate_per_1000: 5, min_order: 1, max_order: 9, service_type: 'Default', is_active: true, visibility: 'private' },
+  ];
+  const tables = { profiles: [alice, bob], services, service_access: [{ service_id: 's-priv', user_id: 'u1' }],
+    user_service_prices: [{ service_id: 's-pub', user_id: 'u1', price: 0.8 }, { service_id: 's-priv', user_id: 'u1', price: 4.25 }] };
+  const a = await handleAction(fakeDb(tables), { key: 'KEY-A', action: 'services' });
+  assert.deepEqual(a.map((s) => [s.service, s.rate]), [[1, '0.8000'], [2, '4.2500']]);
+  const b = await handleAction(fakeDb(tables), { key: 'KEY-B', action: 'services' });
+  assert.deepEqual(b.map((s) => [s.service, s.rate]), [[1, '1.0000']], 'atanmamış kullanıcı özel hizmeti ve başkasının fiyatını görmemeli');
+});
+
 test('services: 1000 satır sınırını aşan listeyi eksiksiz döndürür', async () => {
   const many = Array.from({ length: 2500 }, (_, i) => ({ service_id: 200000 + i, name: 'S' + i, category: 'C', rate_per_1000: 1, min_order: 1, max_order: 10, service_type: 'Default', is_active: true }));
   const list = await handleAction(fakeDb({ profiles: [alice], services: many }), { key: 'KEY-A', action: 'services' });

@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/auth';
 export default function SignIn() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -15,7 +15,7 @@ export default function SignIn() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const { error } = await signIn(email, password);
+    const { error } = await signIn(identifier, password);
     setLoading(false);
     if (error) setError(error);
     else navigate('/dashboard');
@@ -30,8 +30,8 @@ export default function SignIn() {
             <span>{error}</span>
           </div>
         )}
-        <Field icon={Mail} label="Email" type="email" value={email} onChange={setEmail} placeholder="you@example.com" />
-        <Field icon={Lock} label="Password" type="password" value={password} onChange={setPassword} placeholder="••••••••" />
+        <Field icon={Mail} label="Email or username" type="text" value={identifier} onChange={setIdentifier} placeholder="you@example.com or username" autoComplete="username" />
+        <Field icon={Lock} label="Password" type="password" value={password} onChange={setPassword} placeholder="••••••••" autoComplete="current-password" />
         <button
           type="submit"
           disabled={loading}
@@ -70,9 +70,9 @@ export function AuthShell({ children, title, subtitle }: { children: ReactNode; 
 }
 
 export function Field({
-  icon: Icon, label, type, value, onChange, placeholder,
+  icon: Icon, label, type, value, onChange, placeholder, autoComplete, hint, hintTone,
 }: {
-  icon: typeof Mail; label: string; type: string; value: string; onChange: (v: string) => void; placeholder: string;
+  icon: typeof Mail; label: string; type: string; value: string; onChange: (v: string) => void; placeholder: string; autoComplete?: string; hint?: string; hintTone?: 'ok' | 'bad' | 'muted';
 }) {
   return (
     <div>
@@ -85,9 +85,11 @@ export function Field({
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           required
+          autoComplete={autoComplete}
           className="w-full pl-10 pr-4 py-3 rounded-xl bg-bg-elevated border border-border-default text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-colors"
         />
       </div>
+      {hint && <p className={`mt-1 text-xs ${hintTone === 'ok' ? 'text-success-400' : hintTone === 'bad' ? 'text-error-400' : 'text-text-muted'}`}>{hint}</p>}
     </div>
   );
 }

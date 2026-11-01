@@ -22,10 +22,12 @@ import AdminOrders from '@/pages/admin/AdminOrders';
 import AdminDeposits from '@/pages/admin/AdminDeposits';
 import AdminServices from '@/pages/admin/AdminServices';
 import AdminSettings from '@/pages/admin/AdminSettings';
+import UpdateBanner from '@/components/UpdateBanner';
 import PaymentResult from '@/pages/PaymentResult';
 import AdminPayments from '@/pages/admin/AdminPayments';
 import AdminProviders from '@/pages/admin/AdminProviders';
 import AdminCategories from '@/pages/admin/AdminCategories';
+import AdminUserPrices from '@/pages/admin/AdminUserPrices';
 import AdminMappings from '@/pages/admin/AdminMappings';
 import AdminRefunds from '@/pages/admin/AdminRefunds';
 import AdminRefills from '@/pages/admin/AdminRefills';
@@ -33,6 +35,7 @@ import AdminReports from '@/pages/admin/AdminReports';
 import AdminAnnouncements from '@/pages/admin/AdminAnnouncements';
 import AdminSupportLinks from '@/pages/admin/AdminSupportLinks';
 import AdminRoles from '@/pages/admin/AdminRoles';
+import Account from '@/pages/dashboard/Account';
 import BulkOrder from '@/pages/dashboard/BulkOrder';
 
 import type { JSX } from 'react';
@@ -80,6 +83,8 @@ function AppRoutes() {
         );
     }
     return (
+        <>
+        <UpdateBanner />
         <Routes>
             <Route path="/" element={session ? <Navigate to="/dashboard" replace /> : <Landing />} />
             <Route path="/signin" element={session ? <Navigate to="/dashboard" replace /> : <SignIn />} />
@@ -102,6 +107,7 @@ function AppRoutes() {
                 <Route path="new-order" element={<NewOrder />} />
                 <Route path="orders" element={<Orders />} />
                 <Route path="bulk-order" element={<BulkOrder />} />
+                <Route path="account" element={<Account />} />
                 <Route path="add-funds" element={<AddFunds />} />
                 <Route path="transactions" element={<Transactions />} />
                 <Route path="support" element={<Support />} />
@@ -128,6 +134,7 @@ function AppRoutes() {
                 <Route path="providers" element={<Guard perm="providers.manage"><AdminProviders /></Guard>} />
                 <Route path="services" element={<Guard perm="services.manage"><AdminServices /></Guard>} />
                 <Route path="categories" element={<Guard perm="services.manage"><AdminCategories /></Guard>} />
+                <Route path="user-prices" element={<Guard perm="services.manage"><AdminUserPrices /></Guard>} />
                 <Route path="mappings" element={<Guard perm="services.manage"><AdminMappings /></Guard>} />
                 <Route path="reports" element={<Guard perm="reports.view"><AdminReports /></Guard>} />
                 <Route path="announcements" element={<Guard perm="announcements.manage"><AdminAnnouncements /></Guard>} />
@@ -138,6 +145,7 @@ function AppRoutes() {
 
             <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </>
     );
 }
 

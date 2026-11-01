@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useUrlState, useUrlPage } from '@/lib/useUrlState';
 import { Plus, Pencil, Trash2, Search, ShieldCheck, Loader2, Wand2 } from 'lucide-react';
 import { supabase, type Service, CUSTOM_TYPES, SERVICE_TYPES } from '@/lib/supabase';
 import { providerApi, type ProviderService } from '@/lib/providerApi';
@@ -11,29 +12,31 @@ type Form = {
   id: string | null; service_id: string; name: string; description: string; category: string; newCategory: string;
   provider_id: string; original_id: string; rate: string; min_order: string; max_order: string; is_active: boolean;
   custom: boolean; service_type: string; refill_enabled: boolean; refill_days: string; cancel_enabled: boolean;
-  pricing_mode: string; pricing_value: string; min_profit: string; min_price: string; round_to: string;
+  auto_pricing: boolean; visibility: 'public' | 'private'; access: AccessUser[]; ratio: number | null;
   provider_rate: number | null; orig_provider_id: string; orig_original_id: string;
 };
+type AccessUser = { user_id: string; label: string };
 
 const blank = (): Form => ({
   id: null, service_id: '', name: '', description: '', category: 'Kategorisiz', newCategory: '', provider_id: '', original_id: '', rate: '',
   min_order: '10', max_order: '10000', is_active: true, custom: false, service_type: 'Default', refill_enabled: false, refill_days: '30',
-  cancel_enabled: false, pricing_mode: 'manual', pricing_value: '', min_profit: '0', min_price: '0', round_to: '0',
+  cancel_enabled: false, auto_pricing: true, visibility: 'public', access: [], ratio: null,
   provider_rate: null, orig_provider_id: '', orig_original_id: '',
 });
 
 export default function AdminServices() {
   const [rows, setRows] = useState<Service[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useUrlPage();
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<Notice>(null);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [cats, setCats] = useState<string[]>([]);
-  const [q, setQ] = useState('');
-  const [fCat, setFCat] = useState('');
-  const [fSource, setFSource] = useState('');
-  const [fStatus, setFStatus] = useState('');
+  const [q, setQ] = useUrlState('q');
+  const [fCat, setFCat] = useUrlState('cat');
+  const [fSource, setFSource] = useUrlState('src');
+  const [fStatus, setFStatus] = useUrlState('st');
+  const [guardAlerts, setGuardAlerts] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkCat, setBulkCat] = useState('');
   const [form, setForm] = useState<Form | null>(null);
@@ -72,19 +75,30 @@ export default function AdminServices() {
     setLoading(false);
   }, [q, fCat, fSource, fStatus, page]);
 
-  useEffect(() => { loadMeta(); }, [loadMeta]);
+  useEffect(() => {
+    loadMeta();
+    supabase.from('price_history').select('id', { count: 'exact', head: true }).eq('reason', 'below_cost_guard').gte('created_at', new Date(Date.now() - 48 * 3600 * 1000).toISOString()).then(({ count }) => setGuardAlerts(count || 0));
+  }, [loadMeta]);
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
-  useEffect(() => { setPage(0); }, [q, fCat, fSource, fStatus]);
+  const firstFilter = useRef(true);
+  useEffect(() => { if (firstFilter.current) { firstFilter.current = false; return; } setPage(0); }, [q, fCat, fSource, fStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openEdit = (s: Service) => setForm({
     id: s.id, service_id: String(s.service_id), name: s.name, description: s.description || '', category: s.category, newCategory: '',
     provider_id: s.provider_id || '', original_id: s.original_id || '', rate: String(s.rate_per_1000), min_order: String(s.min_order), max_order: String(s.max_order),
     is_active: s.is_active, custom: (s.service_type || 'Default') !== 'Default', service_type: s.service_type || 'Default',
     refill_enabled: !!s.refill_enabled, refill_days: String(s.refill_days ?? 0), cancel_enabled: !!s.cancel_enabled,
-    pricing_mode: s.pricing_mode || 'manual', pricing_value: s.pricing_value != null ? String(s.pricing_value) : '', min_profit: String(s.min_profit ?? 0),
-    min_price: String(s.min_price ?? 0), round_to: String(s.round_to ?? 0), provider_rate: s.provider_rate ?? null,
+    auto_pricing: s.auto_pricing !== false, visibility: (s.visibility as any) === 'private' ? 'private' : 'public', access: [], ratio: s.pricing_ratio ?? null, provider_rate: s.provider_rate ?? null,
     orig_provider_id: s.provider_id || '', orig_original_id: s.original_id || '',
   });
+  const loadAccess = async (serviceId: string) => {
+    const { data: acc } = await supabase.from('service_access').select('user_id').eq('service_id', serviceId);
+    const ids = (acc || []).map((a: any) => a.user_id);
+    if (!ids.length) return [] as AccessUser[];
+    const { data: ps } = await supabase.from('profiles').select('user_id,email,username').in('user_id', ids);
+    return (ps || []).map((p: any) => ({ user_id: p.user_id, label: p.email || p.username || p.user_id })) as AccessUser[];
+  };
+  const openEditFull = async (s: Service) => { openEdit(s); const access = await loadAccess(s.id); setForm((p) => (p && p.id === s.id ? { ...p, access } : p)); };
   const openNew = (kind: 'manual' | 'custom' | 'api') => {
     const f = blank();
     if (kind === 'custom') { f.custom = true; f.service_type = 'Custom Comments'; f.min_order = '1'; }
@@ -134,8 +148,7 @@ export default function AdminServices() {
         name, description: form.description.trim() || null, category, platform: category, min_order: min, max_order: max,
         is_active: form.is_active, service_type: form.custom || form.service_type !== 'Default' ? (form.service_type === 'Default' ? 'Custom Comments' : form.service_type) : 'Default',
         refill_enabled: form.refill_enabled, refill_days: form.refill_enabled ? days : 0, cancel_enabled: form.cancel_enabled,
-        pricing_mode: form.pricing_mode, pricing_value: form.pricing_value === '' ? null : Number(form.pricing_value),
-        min_profit: Number(form.min_profit) || 0, min_price: Number(form.min_price) || 0, round_to: Number(form.round_to) || 0,
+        auto_pricing: form.auto_pricing,
       };
       let id = form.id;
       if (!id) {
@@ -160,6 +173,13 @@ export default function AdminServices() {
         const upd = { ...base, price: rate, rate_per_1000: rate };
         const { error } = await supabase.from('services').update(upd).eq('id', id);
         if (error) throw new Error(error.message);
+      }
+      if (id && (form.visibility === 'private' || form.id)) {
+        if (form.visibility === 'private' && form.access.length === 0) {
+          setNotice({ ok: true, text: 'Hizmet kaydedildi. UYARI: özel hizmette hiçbir kullanıcı seçilmedi; şu an hiç kimse göremez.' });
+        }
+        const { data: vr, error: ve } = await supabase.rpc('admin_set_service_visibility', { p_service: id, p_visibility: form.visibility, p_users: form.access.map((a) => a.user_id) });
+        if (ve || vr?.success === false) throw new Error(`Hizmet kaydedildi ama erişim ayarı uygulanamadı: ${ve?.message || vr?.error}`);
       }
       setForm(null);
       setNotice({ ok: true, text: form.id ? `Hizmet güncellendi${mappingChanged ? ' (panel hizmet numarası değişmedi, yalnızca sağlayıcı eşlemesi güncellendi)' : ''}.` : 'Hizmet eklendi.' });
@@ -211,6 +231,8 @@ export default function AdminServices() {
   const kindBadge = (s: Service) => (
     <>
       {s.source === 'api' ? <Badge tone="brand">API{s.provider_id && provName[s.provider_id] ? ` · ${provName[s.provider_id]}` : ''}</Badge> : <Badge>Manuel</Badge>}
+      {s.visibility === 'private' && <Badge tone="bad">Özel</Badge>}
+      {s.auto_disabled && <Badge tone="bad">Sağlayıcıdan kalktı</Badge>}
       {(s.service_type || 'Default') !== 'Default' && <Badge tone="warn">{s.service_type === 'Custom Comments' ? 'Custom' : s.service_type}</Badge>}
       {s.provider_missing_at && <Badge tone="bad">Sağlayıcıda yok</Badge>}
     </>
@@ -232,6 +254,7 @@ export default function AdminServices() {
       </div>
 
       <NoticeBar notice={notice} onClose={() => setNotice(null)} />
+      {guardAlerts > 0 && <NoticeBar notice={{ ok: false, text: `Son 48 saatte ${guardAlerts} fiyat, maliyet satış fiyatını aştığı için zararına satışı önlemek üzere otomatik yükseltildi. Ayrıntı: Ayarlar → Otomatik Fiyat Güncelleme → Son fiyat değişiklikleri.` }} />}
 
       <div className="flex flex-wrap gap-2">
         <div className="relative flex-1 min-w-[200px]">
@@ -287,7 +310,7 @@ export default function AdminServices() {
                   <td className="px-3 py-3 text-right text-text-secondary whitespace-nowrap">{s.min_order}–{s.max_order}</td>
                   <td className="px-3 py-3"><button onClick={() => toggleActive(s)}><Badge tone={s.is_active ? 'ok' : 'bad'}>{s.is_active ? 'Aktif' : 'Pasif'}</Badge></button></td>
                   <td className="px-3 py-3"><div className="flex gap-1.5 justify-end">
-                    <button onClick={() => openEdit(s)} className="p-2 rounded-lg bg-bg-elevated text-text-secondary"><Pencil className="w-4 h-4" /></button>
+                    <button onClick={() => openEditFull(s)} className="p-2 rounded-lg bg-bg-elevated text-text-secondary"><Pencil className="w-4 h-4" /></button>
                     <button onClick={() => remove(s)} className="p-2 rounded-lg bg-error-500/10 text-error-400"><Trash2 className="w-4 h-4" /></button>
                   </div></td>
                 </tr>
@@ -364,22 +387,17 @@ export default function AdminServices() {
               )}
             </div>
 
-            {f.provider_id && (
-              <div className="p-3 rounded-xl bg-bg-elevated space-y-3">
-                <div className="text-sm font-medium text-text-primary">Otomatik fiyatlandırma</div>
-                <div className="grid sm:grid-cols-5 gap-3">
-                  <div className="sm:col-span-2"><label className="text-xs text-text-muted">Yöntem</label>
-                    <select className={inputCls} value={f.pricing_mode} onChange={(e) => set({ pricing_mode: e.target.value })}>
-                      <option value="manual">Manuel (fiyatı ben belirlerim)</option><option value="ratio">Maliyet × çarpan</option>
-                      <option value="percent">Maliyete % ekle</option><option value="fixed_profit">Sabit kâr ekle ($)</option></select></div>
-                  <div><label className="text-xs text-text-muted">Değer</label><input className={inputCls} disabled={f.pricing_mode === 'manual'} value={f.pricing_value} onChange={(e) => set({ pricing_value: e.target.value })} /></div>
-                  <div><label className="text-xs text-text-muted">Min kâr ($)</label><input className={inputCls} value={f.min_profit} onChange={(e) => set({ min_profit: e.target.value })} /></div>
-                  <div><label className="text-xs text-text-muted">Min fiyat ($)</label><input className={inputCls} value={f.min_price} onChange={(e) => set({ min_price: e.target.value })} /></div>
-                </div>
-                <div className="max-w-[200px]"><label className="text-xs text-text-muted">Yukarı yuvarlama adımı (örn. 0.05)</label><input className={inputCls} value={f.round_to} onChange={(e) => set({ round_to: e.target.value })} /></div>
-                <div className="text-[11px] text-text-muted">Satış fiyatı hiçbir zaman sağlayıcı maliyetinin altına düşmez. Zamanlayıcı yalnızca "Manuel" olmayan hizmetlerin fiyatını günceller (maliyet satışı aşarsa manuel olanlar da korunur).</div>
+            <PricingInfo f={f} set={set} />
+
+            <div className="p-3 rounded-xl bg-bg-elevated space-y-3">
+              <div className="text-sm font-medium text-text-primary">Görünürlük</div>
+              <div className="flex flex-wrap gap-4 text-sm text-text-secondary">
+                <label className="flex items-center gap-2"><input type="radio" checked={f.visibility === 'public'} onChange={() => set({ visibility: 'public' })} /> Herkese açık hizmet</label>
+                <label className="flex items-center gap-2"><input type="radio" checked={f.visibility === 'private'} onChange={() => set({ visibility: 'private' })} /> Özel hizmet</label>
               </div>
-            )}
+              {f.visibility === 'private' && <UserPicker selected={f.access} onChange={(access) => set({ access })} />}
+              <div className="text-[11px] text-text-muted">Özel hizmet yalnızca seçtiğin kullanıcılara görünür ve sipariş verilebilir (arayüz, API, arama, kategori ve toplu sipariş dahil; sunucu tarafında zorunlu). Fiyat ve limit güncellemeleri bu erişimi değiştirmez.</div>
+            </div>
 
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setForm(null)} className={btnGhost}>Vazgeç</button>
@@ -388,6 +406,87 @@ export default function AdminServices() {
           </div>
         )}
       </Modal>
+    </div>
+  );
+}
+
+
+function PricingInfo({ f, set }: { f: Form; set: (p: Partial<Form>) => void }) {
+  const cost = f.provider_rate && f.provider_rate > 0 ? f.provider_rate : null;
+  const rate = Number(f.rate);
+  const valid = rate > 0;
+  const linked = !!f.provider_id;
+  const markup = cost && valid ? ((rate - cost) / cost) * 100 : null;
+  const profit = cost && valid ? rate - cost : null;
+  const margin = cost && valid ? ((rate - cost) / rate) * 100 : null;
+  const ratio = cost && valid ? rate / cost : null;
+  const below = cost && valid && rate < cost;
+  if (!linked) return <div className="text-[11px] text-text-muted">Manuel hizmet: satış fiyatı sabittir (sağlayıcı maliyeti takip edilmez).</div>;
+  return (
+    <div className="p-3 rounded-xl bg-bg-elevated space-y-3">
+      <div className="text-sm font-medium text-text-primary">Fiyat ve kâr (otomatik hesaplanır)</div>
+      {!cost ? (
+        <div className="text-xs text-warning-400">⚠️ Sağlayıcı maliyeti bilinmiyor veya 0. Kâr/oran hesaplanamaz; maliyet sağlayıcıdan alınınca (Doğrula veya otomatik güncelleme) hesaplanır.</div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">
+          <Stat label="Sağlayıcı maliyeti" value={`$${cost.toFixed(4)} / 1000`} />
+          <Stat label="Satış fiyatı" value={valid ? `$${rate.toFixed(4)} / 1000` : '-'} />
+          <Stat label="Brüt kâr / 1000" value={profit != null ? `$${profit.toFixed(4)}` : '-'} tone={below ? 'bad' : 'ok'} />
+          <Stat label="Maliyet üzerine eklenen oran" value={markup != null ? `%${markup.toFixed(2)}` : '-'} hint="(satış − maliyet) ÷ maliyet" />
+          <Stat label="Brüt kâr marjı" value={margin != null ? `%${margin.toFixed(2)}` : '-'} hint="(satış − maliyet) ÷ satış" />
+          <Stat label="Referans oran (satış ÷ maliyet)" value={ratio != null ? `${ratio.toFixed(4)}×` : '-'} hint="Otomatik güncellemede korunur" />
+        </div>
+      )}
+      {below && <div className="text-xs text-error-400">Satış fiyatı sağlayıcı maliyetinin altında olamaz; kaydedilmez.</div>}
+      <label className="flex items-start gap-2 text-sm text-text-secondary">
+        <input type="checkbox" className="mt-0.5" checked={f.auto_pricing} onChange={(e) => set({ auto_pricing: e.target.checked })} />
+        <span><b className="text-text-primary">Otomatik oran koruma:</b> sağlayıcı maliyeti değişince satış fiyatı, yukarıdaki referans orana göre otomatik güncellenir. Satış fiyatını kendin değiştirip kaydettiğinde yeni referans oran otomatik belirlenir; ek ayar girmen gerekmez.</span>
+      </label>
+      {!f.auto_pricing && <div className="text-[11px] text-text-muted">Kapalıyken satış fiyatın sabit kalır; yalnızca maliyet satış fiyatını aşarsa zararına satışı önlemek için fiyat güvenli şekilde yükseltilir.</div>}
+    </div>
+  );
+}
+
+function Stat({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: 'ok' | 'bad' }) {
+  return (
+    <div className="p-2 rounded-lg bg-bg-surface">
+      <div className="text-[11px] text-text-muted">{label}</div>
+      <div className={`font-semibold ${tone === 'bad' ? 'text-error-400' : 'text-text-primary'}`}>{value}</div>
+      {hint && <div className="text-[10px] text-text-muted">{hint}</div>}
+    </div>
+  );
+}
+
+export function UserPicker({ selected, onChange }: { selected: AccessUser[]; onChange: (u: AccessUser[]) => void }) {
+  const [q, setQ] = useState('');
+  const [found, setFound] = useState<AccessUser[]>([]);
+  useEffect(() => {
+    const t = q.trim().replace(/[%,()]/g, ' ');
+    if (t.length < 2) { setFound([]); return; }
+    const h = setTimeout(async () => {
+      const { data } = await supabase.from('profiles').select('user_id,email,username').or(`email.ilike.%${t}%,username.ilike.%${t}%`).limit(8);
+      setFound((data || []).map((p: any) => ({ user_id: p.user_id, label: p.email || p.username })));
+    }, 250);
+    return () => clearTimeout(h);
+  }, [q]);
+  const add = (u: AccessUser) => { if (!selected.some((s) => s.user_id === u.user_id)) onChange([...selected, u]); setQ(''); setFound([]); };
+  return (
+    <div className="space-y-2">
+      <div className="relative">
+        <input className={inputCls} placeholder="Kullanıcı ara (e-posta veya kullanıcı adı, en az 2 karakter)" value={q} onChange={(e) => setQ(e.target.value)} />
+        {found.length > 0 && (
+          <div className="absolute z-10 left-0 right-0 mt-1 rounded-xl bg-bg-surface border border-border-default shadow-xl max-h-52 overflow-y-auto">
+            {found.map((u) => (<button type="button" key={u.user_id} onClick={() => add(u)} className="w-full text-left px-3 py-2 text-sm text-text-primary hover:bg-bg-hover truncate">{u.label}</button>))}
+          </div>)}
+      </div>
+      <div className="rounded-xl border border-border-subtle divide-y divide-border-subtle max-h-48 overflow-y-auto">
+        {selected.length === 0 && <div className="px-3 py-3 text-xs text-text-muted">Henüz kullanıcı seçilmedi.</div>}
+        {selected.map((u) => (
+          <div key={u.user_id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+            <span className="text-text-primary truncate">{u.label}</span>
+            <button type="button" className="text-xs text-error-400" onClick={() => onChange(selected.filter((s) => s.user_id !== u.user_id))}>Kaldır</button>
+          </div>))}
+      </div>
     </div>
   );
 }

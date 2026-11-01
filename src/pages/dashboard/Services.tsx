@@ -9,15 +9,23 @@ export default function Services() {
   const [category, setCategory] = useState('All');
 
   useEffect(() => {
-    supabase
-      .from('services')
-      .select('*')
-      .eq('is_active', true)
-      .order('category', { ascending: true })
-      .then(({ data }) => {
-        setServices((data as Service[]) ?? []);
-        setLoading(false);
-      });
+    (async () => {
+      // 1000 satır sınırını aşmamak için sayfalı okuma; özel hizmetler/fiyatlar RLS ile yalnızca yetkili kullanıcıya gelir
+      const all: Service[] = [];
+      for (let from = 0; ; from += 1000) {
+        const { data } = await supabase.from('services').select('*').eq('is_active', true).order('category', { ascending: true }).order('service_id').range(from, from + 999);
+        all.push(...((data as Service[]) ?? []));
+        if (!data || data.length < 1000) break;
+      }
+      const [{ data: mine }, { data: cats }] = await Promise.all([
+        supabase.from('user_service_prices').select('service_id,price'),
+        supabase.from('categories').select('name,is_active'),
+      ]);
+      const custom = new Map((mine || []).map((m: any) => [m.service_id, Number(m.price)]));
+      const hidden = new Set((cats || []).filter((c: any) => !c.is_active).map((c: any) => c.name));
+      setServices(all.filter((x) => !hidden.has(x.category)).map((x) => (custom.has(x.id) ? { ...x, rate_per_1000: custom.get(x.id)!, price: custom.get(x.id)! } : x)));
+      setLoading(false);
+    })();
   }, []);
 
   const categories = useMemo(() => {

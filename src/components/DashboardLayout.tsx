@@ -3,9 +3,10 @@ import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
 import {
   TrendingUp, LayoutDashboard, Package, ShoppingCart, ListOrdered,
   Wallet, Receipt, LifeBuoy, Gift, LogOut, Menu, X, Wallet as WalletIcon,
-  Shield, Webhook, Layers,
+  Shield, Webhook, Layers, UserCircle,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
+import RouteOutlet from '@/components/RouteOutlet';
 import SupportWidget from '@/components/SupportWidget';
 import AnnouncementsBanner from '@/components/AnnouncementsBanner';
 
@@ -20,6 +21,7 @@ const navItems = [
   { to: '/dashboard/affiliate', label: 'Affiliate', icon: Gift },
   { to: '/dashboard/api', label: 'API', icon: Webhook },
   { to: '/dashboard/support', label: 'Support', icon: LifeBuoy },
+  { to: '/dashboard/account', label: 'Account', icon: UserCircle },
 ];
 
 export default function DashboardLayout() {
@@ -134,7 +136,7 @@ export default function DashboardLayout() {
 
         <main className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
           <AnnouncementsBanner />
-          <Outlet />
+          <RouteOutlet />
         </main>
       <SupportWidget />
       </div>

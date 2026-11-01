@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useUrlState, useUrlPage } from '@/lib/useUrlState';
 import { Check, X, Clock, Search, RefreshCw } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Badge, NoticeBar, Pager, btnGhost, fmtDate, inputCls, type Notice } from '@/components/ui';
@@ -23,15 +24,15 @@ const left = (iso?: string | null) => {
 export default function AdminDeposits() {
   const [rows, setRows] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useUrlPage();
   const [users, setUsers] = useState<Record<string, any>>({});
   const [methods, setMethods] = useState<Record<string, any>>({});
   const [events, setEvents] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [actingId, setActingId] = useState<string | null>(null);
-  const [filter, setFilter] = useState('open');
-  const [provider, setProvider] = useState('');
-  const [q, setQ] = useState('');
+  const [filter, setFilter] = useUrlState('f', 'open');
+  const [provider, setProvider] = useUrlState('prov');
+  const [q, setQ] = useUrlState('q');
   const [notice, setNotice] = useState<Notice>(null);
 
   const load = useCallback(async () => {
@@ -63,7 +64,8 @@ export default function AdminDeposits() {
 
   useEffect(() => { const t = setTimeout(load, 200); return () => clearTimeout(t); }, [load]);
   useEffect(() => { const t = setInterval(load, 20000); return () => clearInterval(t); }, [load]);
-  useEffect(() => setPage(0), [filter, provider, q]);
+  const firstFilter = useRef(true);
+  useEffect(() => { if (firstFilter.current) { firstFilter.current = false; return; } setPage(0); }, [filter, provider, q]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const review = async (r: any, approve: boolean) => {
     if (approve) {

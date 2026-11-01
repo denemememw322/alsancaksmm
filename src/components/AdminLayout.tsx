@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Outlet, NavLink, Link, useNavigate } from 'react-router-dom';
+import { NavLink, Link, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, ShoppingBag, TrendingUp, Settings, LogOut, Shield, Banknote, Plug, Menu, X,
   Tags, Link2, RotateCcw, RefreshCw, BarChart3, Megaphone, MessageCircle, KeyRound, CreditCard, ArrowLeft,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
+import RouteOutlet from '@/components/RouteOutlet';
 
 const adminNav = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -17,6 +18,7 @@ const adminNav = [
   { to: '/admin/providers', label: 'API Sağlayıcılar', icon: Plug, perm: 'providers.manage' },
   { to: '/admin/services', label: 'Hizmetler', icon: TrendingUp, perm: 'services.manage' },
   { to: '/admin/categories', label: 'Kategoriler', icon: Tags, perm: 'services.manage' },
+  { to: '/admin/user-prices', label: 'Kullanıcıya Özel Fiyatlar', icon: Tags, perm: 'services.manage' },
   { to: '/admin/mappings', label: 'Hizmet ID Eşleştirme', icon: Link2, perm: 'services.manage' },
   { to: '/admin/reports', label: 'Raporlar', icon: BarChart3, perm: 'reports.view' },
   { to: '/admin/announcements', label: 'Duyurular', icon: Megaphone, perm: 'announcements.manage' },
@@ -84,7 +86,7 @@ export default function AdminLayout() {
           <span className="font-semibold text-text-primary">Admin Panel</span>
         </header>
         <main className="p-4 sm:p-6 lg:p-8 min-w-0">
-          <Outlet />
+          <RouteOutlet />
         </main>
       </div>
     </div>
