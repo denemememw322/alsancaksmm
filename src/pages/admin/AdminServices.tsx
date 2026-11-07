@@ -8,6 +8,15 @@ import { Badge, Modal, NoticeBar, Pager, btnDanger, btnGhost, btnPrimary, inputC
 type Provider = { id: string; name: string; enabled: boolean };
 const PAGE = 25;
 
+// Rate kutusu: virgülü noktaya çevirir, rakam dışını atar, "035" gibi baştaki sıfırlı girişi 0.35 olarak düzeltir
+const sanitizeRate = (raw: string) => {
+  let v = raw.replace(',', '.').replace(/[^0-9.]/g, '');
+  const i = v.indexOf('.');
+  if (i !== -1) v = v.slice(0, i + 1) + v.slice(i + 1).replace(/\./g, '');
+  if (!v.includes('.') && /^0\d+$/.test(v)) v = '0.' + v.slice(1);
+  return v;
+};
+
 type Form = {
   id: string | null; service_id: string; name: string; description: string; category: string; newCategory: string;
   provider_id: string; original_id: string; rate: string; min_order: string; max_order: string; is_active: boolean;
@@ -114,7 +123,18 @@ export default function AdminServices() {
     try {
       const r = await providerApi({ action: 'validate', provider_id: form.provider_id, service_id: form.original_id.trim() });
       if (!r.found) return setVerify({ state: 'bad', text: r.message });
-      setVerify({ state: 'ok', svc: r.service as ProviderService });
+      const v = r.service as ProviderService;
+      setVerify({ state: 'ok', svc: v });
+      // Maliyeti her zaman forma işle; YENİ hizmette ad, limitler, özellikler ve (boşsa) rate = maliyet otomatik dolar. Rate'i sonra istediğin gibi değiştirebilirsin.
+      setForm((prev) => {
+        if (!prev) return prev;
+        if (prev.id) return { ...prev, provider_rate: v.rate };
+        return {
+          ...prev, provider_rate: v.rate, name: prev.name || v.name, rate: prev.rate || String(v.rate),
+          min_order: String(v.min || prev.min_order), max_order: String(v.max || prev.max_order),
+          refill_enabled: v.refill, cancel_enabled: v.cancel, service_type: v.type || 'Default', custom: (v.type || 'Default') !== 'Default',
+        };
+      });
     } catch (e: any) { setVerify({ state: 'bad', text: e.message }); }
   };
   const fillFromVerified = () => {
@@ -154,15 +174,14 @@ export default function AdminServices() {
       if (!id) {
         const ins: Record<string, unknown> = { ...base, price: rate, rate_per_1000: rate, type: form.provider_id ? 'API' : 'Manual', avg_time: 'Hızlı', source: form.provider_id ? 'api' : 'manual' };
         if (form.service_id.trim()) ins.service_id = parseInt(form.service_id);
-        if (form.provider_id) { ins.provider_id = form.provider_id; ins.original_id = form.original_id.trim(); }
+        if (form.provider_id) {
+          ins.provider_id = form.provider_id; ins.original_id = form.original_id.trim();
+          ins.provider_rate = verify.svc?.rate ?? form.provider_rate; // gerçek sağlayıcı maliyeti (doğrulamadan)
+          if (!(Number(ins.provider_rate) > 0)) throw new Error('Sağlayıcı maliyeti alınamadı. Önce "Doğrula" butonuna bas.');
+        }
         const { data, error } = await supabase.from('services').insert(ins).select('id').single();
         if (error) throw new Error(error.message.includes('services_service_id') ? 'Bu hizmet numarası zaten kullanılıyor.' : error.message.includes('services_provider_original') ? 'Bu sağlayıcı servisi zaten başka bir hizmete bağlı.' : error.message);
         id = data.id;
-        // yeni API hizmeti için veritabanı varsayılan satış fiyatını (maliyet × çarpan) uygular; yöneticinin yazdığı rate'i yeniden uygula
-        if (form.provider_id) {
-          const { error: e2 } = await supabase.from('services').update({ rate_per_1000: rate, price: rate }).eq('id', id);
-          if (e2) throw new Error(`Hizmet eklendi ama rate ayarlanamadı: ${e2.message}`);
-        }
       } else {
         if (mappingChanged) {
           const meta = verify.svc ? { rate: verify.svc.rate, min: verify.svc.min, max: verify.svc.max, refill: verify.svc.refill, cancel: verify.svc.cancel, type: verify.svc.type, category: verify.svc.category } : null;
@@ -361,7 +380,8 @@ export default function AdminServices() {
             </div>
 
             <div className="grid sm:grid-cols-4 gap-3">
-              <div><label className="text-xs text-text-muted">Rate ($/1000){f.provider_rate ? ` · maliyet $${f.provider_rate}` : ''}</label><input className={inputCls} inputMode="decimal" value={f.rate} onChange={(e) => set({ rate: e.target.value })} /></div>
+              <div><label className="text-xs text-text-muted">Rate ($/1000){f.provider_rate ? ` · maliyet $${f.provider_rate}` : ''}</label><input className={inputCls} inputMode="decimal" value={f.rate} onChange={(e) => set({ rate: sanitizeRate(e.target.value) })} placeholder={f.provider_rate ? String(f.provider_rate) : '0.00'} />
+                {Number(f.rate) > 0 && <div className="text-[11px] text-text-muted mt-1">= ${Number(f.rate).toFixed(4)} / 1000{f.provider_rate && f.provider_rate > 0 ? ` · maliyetin ${(Number(f.rate) / f.provider_rate).toFixed(2)}×` : ''}</div>}</div>
               <div><label className="text-xs text-text-muted">Min sipariş</label><input className={inputCls} inputMode="numeric" value={f.min_order} onChange={(e) => set({ min_order: e.target.value })} /></div>
               <div><label className="text-xs text-text-muted">Max sipariş</label><input className={inputCls} inputMode="numeric" value={f.max_order} onChange={(e) => set({ max_order: e.target.value })} /></div>
               <div><label className="text-xs text-text-muted">Durum</label><select className={inputCls} value={f.is_active ? '1' : '0'} onChange={(e) => set({ is_active: e.target.value === '1' })}><option value="1">Aktif</option><option value="0">Pasif</option></select></div>

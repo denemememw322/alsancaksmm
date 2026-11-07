@@ -94,7 +94,7 @@ export default function AdminUserPrices() {
           <div className="grid sm:grid-cols-[1fr_auto] gap-3 items-end">
             <div className="space-y-2">
               <label className="text-xs text-text-muted">3) Bu kullanıcıya özel satış fiyatı ($ / 1000) · genel fiyat: ${Number(service.rate_per_1000).toFixed(4)}{cost ? ` · maliyet: $${cost.toFixed(4)}` : ' · maliyet bilinmiyor'}</label>
-              <input className={inputCls} inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="örn. 0.80" />
+              <input className={inputCls} inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value.replace(',', '.'))} placeholder="örn. 0.80" />
               {cost && pn > 0 && <div className="text-xs text-text-secondary">{pn < cost ? <span className="text-error-400">Maliyetin altında olamaz.</span> : <>Eklenen oran %{(((pn - cost) / cost) * 100).toFixed(2)} · brüt kâr/1000 ${(pn - cost).toFixed(4)} · marj %{(((pn - cost) / pn) * 100).toFixed(2)} · referans {(pn / cost).toFixed(4)}×</>}</div>}
               {!cost && pn > 0 && <div className="text-xs text-warning-400">Maliyet bilinmediği için oran hesaplanamadı (manuel hizmet veya maliyet eksik).</div>}
               <label className="flex items-center gap-2 text-xs text-text-secondary"><input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} /> Otomatik oran koruma (maliyet değişince bu fiyat kendi oranıyla güncellenir)</label>
@@ -118,7 +118,7 @@ export default function AdminUserPrices() {
               <tr key={r.id} className="border-b border-border-subtle last:border-0">
                 <td className="px-3 py-3 text-text-primary max-w-[280px] break-words">{mode === 'user' ? `#${sv?.service_id ?? '?'} ${sv?.name ?? ''}` : users[r.user_id] || r.user_id}</td>
                 <td className="px-3 py-3 text-right text-text-secondary">${Number(sv?.rate_per_1000 ?? 0).toFixed(4)}</td>
-                <td className="px-3 py-3 text-right">{edit?.id === r.id ? <input autoFocus className="w-24 px-2 py-1 rounded bg-bg-elevated border border-border-default text-right text-text-primary" value={edit.v} onChange={(e) => setEdit({ id: r.id, v: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && saveEdit(r)} /> : <button className="font-semibold text-brand-400" onClick={() => setEdit({ id: r.id, v: String(r.price) })}>${Number(r.price).toFixed(4)}</button>}</td>
+                <td className="px-3 py-3 text-right">{edit?.id === r.id ? <input autoFocus className="w-24 px-2 py-1 rounded bg-bg-elevated border border-border-default text-right text-text-primary" value={edit.v} onChange={(e) => setEdit({ id: r.id, v: e.target.value.replace(',', '.') })} onKeyDown={(e) => e.key === 'Enter' && saveEdit(r)} /> : <button className="font-semibold text-brand-400" onClick={() => setEdit({ id: r.id, v: String(r.price) })}>${Number(r.price).toFixed(4)}</button>}</td>
                 <td className="px-3 py-3 text-right text-text-muted">{c ? `$${c.toFixed(4)}` : '-'}</td>
                 <td className="px-3 py-3 text-right text-text-muted">{r.ratio ? `${Number(r.ratio).toFixed(3)}×` : c ? '-' : <span title="Maliyet bilinmiyor">?</span>}</td>
                 <td className="px-3 py-3"><button onClick={() => toggleAuto(r)}><Badge tone={r.auto_pricing ? 'ok' : 'muted'}>{r.auto_pricing ? 'Açık' : 'Kapalı'}</Badge></button></td>
